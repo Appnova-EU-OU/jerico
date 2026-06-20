@@ -21,7 +21,7 @@ Open the downloaded `jerico-<version>-arm64.dmg`, then drag **Jerico** into your
 
 ## Links
 
-- Product: https://lcars.jerico.appnova.io
+- Product: https://jerico.appnova.io
 - All releases & changelogs: https://github.com/Appnova-EU-OU/jerico/releases
 
 ---
