@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question
+    url: https://github.com/Appnova-EU-OU/jerico/discussions/categories/q-a
+    about: Please ask and answer questions in our Q&A discussions.
+  - name: Feature Ideas
+    url: https://github.com/Appnova-EU-OU/jerico/discussions/categories/ideas
+    about: Share and discuss feature ideas before creating an issue.
+  - name: Announcements
+    url: https://github.com/Appnova-EU-OU/jerico/discussions/categories/announcements
+    about: Check the latest announcements and updates.
