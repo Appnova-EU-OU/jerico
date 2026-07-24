@@ -1,0 +1,28 @@
+title: "[Feature Idea]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your feature idea for Jerico.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Feature Idea
+      description: Describe your idea and the problem it solves.
+    validations:
+      required: true
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use Case
+      description: Who would benefit from this and how would they use it?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Have you considered any alternatives or workarounds?
+    validations:
+      required: false
