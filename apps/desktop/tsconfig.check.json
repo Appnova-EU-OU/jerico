@@ -1,0 +1,31 @@
+{
+  // The checking view of this app, as opposed to the BUILDING view in
+  // tsconfig.json — which includes `src/main/**/*` only, because that is all
+  // `tsc` emits. That narrowness is why 0.25.0 shipped a preload that never
+  // implemented a callback the renderer called: nothing outside src/main was ever
+  // read by a typechecker, and `tsc` cannot read .svelte at all.
+  //
+  // svelte-check uses this one instead, so the renderer and the preload — the two
+  // halves that talk to each other across contextBridge — are checked against the
+  // same contract. Baseline is 0 errors as of 0.25.0, and CI holds it there with
+  // no grandfathered allowance.
+  //
+  // Compiler options are inherited wholesale and deliberately NOT narrowed. An
+  // earlier version pinned `"types": ["svelte", "node"]`; measured both ways it
+  // changed nothing (0 errors either way), and pinning would mean that the day
+  // someone adds an `@types/*` package here, the build view loads it and this view
+  // silently does not. Two configs that disagree about the ambient world is the
+  // problem this file exists to end, not one to reintroduce.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Nothing is emitted from here; the build still owns tsconfig.json.
+    "noEmit": true
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*.ts",
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.svelte"
+  ],
+  "exclude": ["node_modules", "out", "dist"]
+}

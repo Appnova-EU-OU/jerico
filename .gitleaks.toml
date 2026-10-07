@@ -1,0 +1,44 @@
+# Secret scan for this repository: gitleaks' default rule set plus rules for
+# credentials this project's components handle. Run: scripts/secret-scan.sh
+title = "open client secret scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "daemon-token"
+description = "Daemon token (brg_ followed by 32 hex characters)"
+regex = '''\bbrg_[0-9a-f]{32}\b'''
+keywords = ["brg_"]
+
+[[rules]]
+id = "better-auth-secret"
+description = "BETTER_AUTH_SECRET assigned a value"
+regex = '''BETTER_AUTH_SECRET["']?\s*[:=]\s*["']?([^\s"'#`$]{12,})'''
+secretGroup = 1
+keywords = ["better_auth_secret"]
+
+[[rules]]
+id = "postgres-url-with-password"
+description = "PostgreSQL connection URL that embeds a password for a non-local host"
+regex = '''postgres(?:ql)?://[^\s:/@'"`]+:([^\s@'"`]+)@([^\s/:'"`?]+)'''
+secretGroup = 1
+keywords = ["postgres://", "postgresql://"]
+[[rules.allowlists]]
+description = "local, documentation and placeholder hosts"
+regexTarget = "match"
+regexes = ['''@(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0|db|postgres|example\.(?:com|org)|host)(?:[:/]|$)''']
+
+[[rules]]
+id = "managed-postgres-host"
+description = "Hostname of a managed PostgreSQL service (Neon / Aiven)"
+regex = '''\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:neon\.tech|aivencloud\.com)\b'''
+keywords = ["neon.tech", "aivencloud.com"]
+
+# False positives of the default generic-api-key rule, each one a literal
+# identifier rather than a credential. Keep this list exact-match only.
+[[allowlists]]
+description = "counter name in a daemon lifecycle log call (packages/daemon/src/ws/client.ts): reason: 'token_invalid_or_expired', consecutive1008"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^consecutive1008$''']

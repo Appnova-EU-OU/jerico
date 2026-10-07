@@ -1,0 +1,191 @@
+name: ci
+
+# No secrets are referenced anywhere in this workflow, and it never runs with
+# write access: `pull_request` (not `pull_request_target`) gives fork pull
+# requests a read-only token and no repository secrets.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan (gitleaks, pinned)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Isolated HOME for every later step
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+      # Runs before any install so node_modules is never part of the scan.
+      - name: gitleaks over the working tree
+        run: scripts/secret-scan.sh
+
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # HOME for the whole job (tool setup, install and its lifecycle scripts,
+      # typecheck, build, test) is an empty directory under RUNNER_TEMP, so no
+      # step can read or modify the runner's real home directory. Written to
+      # GITHUB_ENV because jobs.<id>.env cannot reference runner.temp.
+      - name: Isolated HOME for every later step
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+          echo "TEST_HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+
+      # pnpm version comes from package.json "packageManager" (pnpm 10).
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install (frozen lockfile)
+        run: |
+          case "$HOME" in "$RUNNER_TEMP"/*) echo "HOME=$HOME" ;; *) echo "::error::HOME is not isolated: $HOME"; exit 1 ;; esac
+          pnpm install --frozen-lockfile
+
+      - name: Typecheck — shared, mcp-server, codegraph, inspect-runtime, daemon, desktop
+        run: |
+          pnpm --filter ./packages/shared typecheck
+          pnpm --filter ./packages/mcp-server typecheck
+          pnpm --filter ./packages/codegraph typecheck
+          pnpm --filter ./packages/inspect-runtime typecheck
+          pnpm --filter ./packages/daemon typecheck
+          pnpm --filter ./apps/desktop typecheck
+
+      - name: Desktop svelte-check (renderer + preload, strict 0)
+        run: pnpm --filter ./apps/desktop check
+
+      - name: Shared tests
+        run: |
+          cd packages/shared
+          HOME="$TEST_HOME" bun test
+
+      # Some tests spawn the bundled dist/index.cjs, so build before testing.
+      - name: MCP server build + tests
+        run: |
+          pnpm --filter ./packages/mcp-server build
+          HOME="$TEST_HOME" pnpm --filter ./packages/mcp-server test
+
+      - name: Codegraph build + tests (real SQLite + tree-sitter)
+        run: |
+          pnpm --filter ./packages/codegraph build
+          HOME="$TEST_HOME" node --test packages/codegraph/src/__tests__/*.test.mjs
+
+      # The daemon bundle inlines inspect-runtime's built script.
+      - name: Daemon build + engine-free bundle assertion
+        run: |
+          pnpm --filter ./packages/inspect-runtime build
+          cd packages/daemon
+          node scripts/build.mjs
+          if grep -qE '[a-zA-Z_$][\w$]*\("better-sqlite3"\)' dist/index.js; then
+            echo "::error::dist/index.js requires better-sqlite3 — engine-free invariant broken"
+            exit 1
+          fi
+          if grep -qE '[a-zA-Z_$][\w$]*\("(web-)?tree-sitter"\)' dist/index.js; then
+            echo "::error::dist/index.js requires tree-sitter — engine-free invariant broken"
+            exit 1
+          fi
+
+      - name: Desktop tests + assert discovered file count
+        run: |
+          cd apps/desktop
+          ON_DISK=$(node "$GITHUB_WORKSPACE/scripts/assert-test-integrity.mjs" node scripts)
+          LOG=$(mktemp)
+          export JERICO_REPORT_TEST_FILE=1
+          export NODE_OPTIONS="--import=$GITHUB_WORKSPACE/scripts/report-node-test-file.mjs ${NODE_OPTIONS:-}"
+          set +e
+          set -o pipefail
+          HOME="$TEST_HOME" node --test 2>&1 | tee "$LOG"
+          SUITE_STATUS=${PIPESTATUS[0]}
+          set -e
+          RAN=$(awk '/JERICO_TEST_FILE / { marker=$0; sub(/^.*JERICO_TEST_FILE /, "", marker); seen[marker]=1 } END { print length(seen) }' "$LOG")
+          echo "Desktop test files: executed $RAN of $ON_DISK on disk"
+          if [ "$RAN" -ne "$ON_DISK" ]; then
+            echo "::error::Desktop discovery mismatch: runner=$RAN, disk=$ON_DISK"
+            exit 1
+          fi
+          exit "$SUITE_STATUS"
+
+      # Install/uninstall tests mock launchctl, the keychain and every file
+      # removal; the empty HOME and BRIDGE_PROFILE= are a second line of defence.
+      # Every daemon test file runs on both legs. The cases that need a macOS
+      # facility (Keychain, /tmp → /private/tmp, the tmpdir home alias) are
+      # guarded per test with test.skipIf(process.platform !== 'darwin').
+      - name: Daemon tests + assert discovered file count
+        run: |
+          cd packages/daemon
+          ON_DISK=$(node "$GITHUB_WORKSPACE/scripts/assert-test-integrity.mjs" bun .)
+          LOG=$(mktemp)
+          set +e
+          set -o pipefail
+          HOME="$TEST_HOME" BRIDGE_PROFILE= bun test 2>&1 | tee "$LOG"
+          SUITE_STATUS=${PIPESTATUS[0]}
+          set -e
+          RAN=$(sed -nE 's/.*across ([0-9]+) files?.*/\1/p' "$LOG" | tail -1)
+          echo "Daemon test files: executed ${RAN:-unparsed} of $ON_DISK on disk ($RUNNER_OS)"
+          if [ -z "$RAN" ] || [ "$RAN" -ne "$ON_DISK" ]; then
+            echo "::error::Daemon discovery mismatch: runner=${RAN:-unparsed}, disk=$ON_DISK"
+            exit 1
+          fi
+          exit "$SUITE_STATUS"
+
+      # Packaging has to keep working for outside pull requests too: build the
+      # daemon binary the app embeds, package an unsigned .app (no certificate
+      # is looked up: auto-discovery is off and no notarization credentials
+      # exist here), then check what it contains and that the embedded daemon runs.
+      - name: Package desktop app (unsigned) + assert contents
+        if: runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PKG_CACHE_PATH: ${{ runner.temp }}/pkg-cache
+        run: |
+          set -euo pipefail
+          ARCH=$(node -p 'process.arch')
+          (cd packages/daemon && node scripts/pkg-build.mjs --target="macos-$ARCH")
+          cp "packages/daemon/dist/bin/bridge-agent-macos-$ARCH" apps/desktop/resources/bridge-agent
+          # shellcheck disable=SC2016  # a JavaScript template literal, not shell
+          node -e '
+            const path = require("path"); const fs = require("fs")
+            const pkg = require.resolve("node-pty/package.json", { paths: [path.resolve("packages/daemon")] })
+            fs.copyFileSync(path.join(path.dirname(pkg), "prebuilds", `darwin-${process.arch}`, "spawn-helper"), "apps/desktop/resources/spawn-helper")'
+          chmod +x apps/desktop/resources/bridge-agent apps/desktop/resources/spawn-helper
+          cd apps/desktop
+          pnpm build
+          pnpm exec electron-builder --mac --dir --publish never
+          APP=$(find dist -maxdepth 2 -name '*.app' -print -quit)
+          if [ -z "$APP" ]; then echo "::error::electron-builder produced no .app"; exit 1; fi
+          echo "Packaged: $APP"
+          for f in app.asar bridge-agent spawn-helper fonts-licenses/Archivo-OFL.txt fonts-licenses/IBMPlexMono-OFL.txt; do
+            if [ ! -s "$APP/Contents/Resources/$f" ]; then echo "::error::$APP is missing Contents/Resources/$f"; exit 1; fi
+          done
+          HOME="$TEST_HOME" BRIDGE_PROFILE='' "$APP/Contents/Resources/bridge-agent" --version

@@ -1,0 +1,463 @@
+@import './fonts.css';
+
+/* ------------------------------------------------------------------ */
+/*  Jerico Desktop — instrument graphite.                              */
+/*                                                                     */
+/*  Ported from apps/desktop/design/02-setup-and-gate.html, which is    */
+/*  itself ported from the marketing site's stylesheet, including      */
+/*  its governing rule: colour is never decoration. The ground is       */
+/*  achromatic; the only chromatic marks encode state (--live/--hold/   */
+/*  --down) and never appear alone — every one is paired with a word,   */
+/*  because colour-blind users and greyscale screenshots both exist.    */
+/*                                                                     */
+/*  There is no brand accent. The primary action is the BRIGHTEST       */
+/*  element, never the most saturated. Radii are 2px. Emphasis is a     */
+/*  weight drop at expanded width, not a colour swap. Sections are      */
+/*  separated by hairlines and rhythm — no cards, no pills.             */
+/*                                                                     */
+/*  This replaces the --t-* token layer the wizard used to import from  */
+/*  packages/shared/src/themes.css, which is the web app's palette and  */
+/*  was never designed for a 520pt window.                             */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --bg:        #0b0b0b;
+  --bg-2:      #121212;
+  --win:       #0e0e0d;
+  --ink:       #f2f0ec;
+  --ink-2:     #a5a19a;
+  --ink-3:     #8e8a83;
+  /* #5b5852 came from the approved spec and measures 2.72:1 on --win — under
+     the 4.5:1 AA floor, and it is not decorative: it carries the token-field
+     label, the hints, the meta lines, the un-visited rail steps and disabled
+     button text. Raised to 4.69:1. It is still unmistakably the quietest voice
+     (--ink-3 is 5.62:1, --ink-2 7.51:1, --ink 16.97:1) — the ladder compresses
+     at the bottom rather than being extended below the readable floor. */
+  --ink-ghost: #807d74;
+
+  /* Two kinds of line, because WCAG treats them differently. --rule and
+     --rule-2 separate things: decorative, exempt, and deliberately near
+     invisible. --edge is the boundary of something you can operate — the token
+     field, the checkbox squares, a ghost button — which needs 3:1 under
+     1.4.11. At 1.54:1 those affordances were nearly invisible at rest. */
+  --rule:      #232322;
+  --rule-2:    #34342f;
+  --edge:      #63605a;
+
+  --live: #6fdca0;
+  --hold: #ffb547;
+  --down: #f0655e;
+
+  --display: 'Archivo', system-ui, -apple-system, sans-serif;
+  --mono:    'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease:    cubic-bezier(.2, .7, .2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Every window in this document is now on the new palette, so body can carry
+   the ground again rather than deferring to the web app's tokens. The
+   .jerico-ui scope stays: it is what keeps the primitives from colliding with
+   whatever a future screen brings, and it is the reason `.btn` here never
+   reached Update.svelte's own `.btn`. */
+html, body {
+  height: 100%;
+  margin: 0;
+  /* The document itself must never scroll. Each window is a fixed-size panel
+     whose scrolling happens inside its own content region; letting the body
+     scroll too means the title bar can slide away and the window gains a
+     second, invisible scroll axis. */
+  overflow: hidden;
+  background: var(--win);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 15px;
+  line-height: 1.58;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The popover is a transparent, frameless window, and the only opaque thing in
+   it is the card. The rule above now paints body with --win, which is opaque,
+   so without this the popover's whole window would be a dark rectangle —
+   including the corners the card rounds away and the gap the notch points
+   across. (This mattered before the palette move too, when body carried the
+   web app's --t-bg; the ground changed, the problem did not.)
+   Height goes auto with it: the window is sized to the card's measured height,
+   and a 100%-tall body inside a window that is being resized to fit its content
+   is a circular measurement. */
+html.popover-host,
+body.popover-host {
+  background: transparent;
+  height: auto;
+  overflow: hidden;
+}
+
+/* ── the scope root ──────────────────────────────────────────────────────
+   Everything below is namespaced under .jerico-ui, which WizardShell puts on
+   its root. Unscoped primitives named `.btn` and `.p`, in a document three
+   other components already live in, is not a design system — it is a
+   collision: Update.svelte has its own scoped `.btn` and was silently
+   inheriting mono, uppercase, tracking and 2px radii through the gaps its own
+   rule left. When those three windows are ported they adopt this class, and
+   the legacy body rule above leaves with them. */
+.jerico-ui {
+  background: var(--win);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 15px;
+  line-height: 1.58;
+  font-variant-numeric: tabular-nums;
+  text-rendering: optimizeLegibility;
+}
+
+.jerico-ui ::selection { background: var(--ink); color: var(--bg); }
+
+.jerico-ui /* ── type ─────────────────────────────────────────────────────────── */
+
+h2{
+  margin: 0;
+  font-size: 25px; font-weight: 300; font-stretch: 125%;
+  letter-spacing: -.024em; line-height: 1.14;
+  color: var(--ink); text-wrap: balance;
+}
+
+.jerico-ui .p{
+  margin: 12px 0 0;
+  font-size: 13.5px; line-height: 1.6;
+  color: var(--ink-2); max-width: 42ch;
+}
+.jerico-ui .p b{ font-weight: 500; color: var(--ink); }
+.jerico-ui .p a{ color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule-2); }
+.jerico-ui .p a:hover{ border-color: var(--ink-3); }
+
+.jerico-ui .meta{
+  margin-top: 14px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-ghost);
+}
+
+.jerico-ui .mark{ color: var(--ink); margin-bottom: 18px; flex: none; }
+
+.jerico-ui code{
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  background: #141413; border: 1px solid var(--rule); border-radius: 2px; padding: .5px 4px;
+}
+.jerico-ui kbd{
+  font-family: var(--mono); font-size: 11px; color: var(--ink);
+  background: #141413; border: 1px solid var(--rule-2); border-radius: 2px; padding: 1px 5px;
+}
+
+.jerico-ui /* ── buttons: mono, uppercase, 2px ────────────────────────────────── */
+
+.btn{
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: .09em; text-transform: uppercase;
+  padding: 11px 16px; border-radius: 2px;
+  border: 1px solid transparent; cursor: pointer;
+  transition: background .18s var(--ease), border-color .18s var(--ease),
+              color .18s var(--ease), box-shadow .18s var(--ease), transform .12s var(--ease);
+}
+.jerico-ui .btn:focus-visible{ outline: 1px solid var(--ink-3); outline-offset: 3px; }
+
+.jerico-ui .btn-primary{ background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.jerico-ui .btn-primary:hover:not(:disabled){ background: #fff; border-color: #fff; box-shadow: 0 8px 30px -14px rgba(255, 255, 255, .5); }
+.jerico-ui .btn-primary:active:not(:disabled){ transform: scale(.985); background: var(--ink); }
+.jerico-ui .btn-primary:disabled{ background: transparent; color: var(--ink-ghost); border-color: var(--edge); cursor: not-allowed; }
+
+.jerico-ui .btn-ghost{ border-color: var(--edge); color: var(--ink); background: transparent; }
+.jerico-ui .btn-ghost:hover:not(:disabled){ border-color: var(--ink-3); background: var(--bg-2); }
+.jerico-ui .btn-ghost:active:not(:disabled){ transform: scale(.985); }
+.jerico-ui .btn-ghost:disabled{ color: var(--ink-ghost); border-color: var(--rule); cursor: not-allowed; }
+
+.jerico-ui .btn-text{ color: var(--ink-3); padding: 11px 6px; background: none; border-color: transparent; }
+.jerico-ui .btn-text:hover:not(:disabled){ color: var(--ink); }
+.jerico-ui .btn-text:disabled{ color: var(--ink-ghost); cursor: not-allowed; }
+
+.jerico-ui .btn-sm{ padding: 6px 10px; font-size: 9.5px; }
+
+.jerico-ui /* ── registers: hairline-separated rows, never cards ──────────────── */
+
+/* A register is a list of things with a state, so it is marked up as one — the
+   accessibility tree showed the rows as a flat run of sibling strings with no
+   grouping and no count. `> *` rather than `> div` so the same rules hold
+   whether a row is a div or an li. */
+.reg{ margin-top: 22px; border-top: 1px solid var(--rule); list-style: none; padding: 0; }
+.jerico-ui .reg > *{ padding: 15px 0; border-bottom: 1px solid var(--rule); }
+.jerico-ui .reg .rt{
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 13.5px; font-weight: 500; letter-spacing: -.005em; color: var(--ink);
+}
+.jerico-ui .reg .rt .s{
+  margin-left: auto;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-ghost);
+}
+.jerico-ui .reg .rd{ margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); max-width: 40ch; }
+.jerico-ui .reg .ra{ margin-top: 11px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.jerico-ui /* status: a filled square AND a word — never colour alone */
+.mk{ width: 7px; height: 7px; flex: none; background: var(--ink-ghost); align-self: center; }
+.jerico-ui .mk.pass{ background: var(--live); }
+.jerico-ui .mk.fail{ background: var(--down); }
+.jerico-ui .mk.wait{ background: var(--hold); }
+.jerico-ui .st{ font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; }
+.jerico-ui .st.pass{ color: var(--live); }
+.jerico-ui .st.fail{ color: var(--down); }
+.jerico-ui .st.wait{ color: var(--hold); }
+
+.jerico-ui /* ── input ────────────────────────────────────────────────────────── */
+
+.inp{ margin-top: 20px; }
+.jerico-ui .inp label{
+  display: block;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-ghost); margin-bottom: 7px;
+}
+.jerico-ui .inp input{
+  width: 100%; padding: 10px 12px;
+  font-family: var(--mono); font-size: 12.5px; letter-spacing: .06em;
+  color: var(--ink); background: #131312;
+  border: 1px solid var(--edge); border-radius: 2px; outline: none;
+  transition: border-color .16s var(--ease);
+}
+.jerico-ui .inp input::placeholder{ color: var(--ink-ghost); letter-spacing: .04em; }
+.jerico-ui .inp input:focus{ border-color: var(--ink-3); }
+.jerico-ui .inp .hint{ margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--ink-ghost); letter-spacing: .03em; }
+.jerico-ui .inp .err{ margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--down); letter-spacing: .03em; }
+
+.jerico-ui /* ── toggle: a square, not a pill ─────────────────────────────────── */
+
+/* position: relative is load-bearing on every label that hides a real input.
+   The input inside is position:absolute, and an absolutely-positioned element
+   with no positioned ancestor is laid out against the DOCUMENT — outside the
+   scroll region's clipping, extending the page below the window. Focus it (by
+   clicking the switch) and the browser scrolls the document to reach it, which
+   slides the whole window up under its own title bar and leaves the bottom
+   half empty. Measured: an input 13px tall with its bottom at 633 in a 620pt
+   window, and html.scrollHeight at 960. overflow:hidden does not save you —
+   it stops the user scrolling, not focus(). */
+.tg{ position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.jerico-ui .tg input{ position: absolute; opacity: 0; pointer-events: none; }
+.jerico-ui .tg .box{
+  width: 14px; height: 14px; border: 1px solid var(--edge); border-radius: 2px;
+  display: grid; place-items: center;
+  transition: background .15s var(--ease), border-color .15s var(--ease);
+}
+.jerico-ui .tg .box::after{
+  content: ""; width: 6px; height: 6px; background: var(--bg);
+  transform: scale(0); transition: transform .15s var(--ease);
+}
+.jerico-ui .tg input:checked + .box{ background: var(--ink); border-color: var(--ink); }
+.jerico-ui .tg input:checked + .box::after{ transform: scale(1); }
+.jerico-ui .tg input:focus-visible + .box{ outline: 1px solid var(--ink-3); outline-offset: 3px; }
+.jerico-ui .tg .txt{ font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; color: var(--ink-2); }
+.jerico-ui .tg:hover .txt{ color: var(--ink); }
+
+.jerico-ui /* ── mono result block ────────────────────────────────────────────── */
+
+.out{
+  margin-top: 20px; border-left: 1px solid var(--rule-2); padding-left: 13px;
+  display: flex; flex-direction: column; gap: 3px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .02em;
+}
+.jerico-ui .out .l{ display: flex; gap: 10px; color: var(--ink-3); }
+.jerico-ui .out .l .k{ color: var(--ink-ghost); min-width: 54px; flex: none; }
+.jerico-ui .out .l .v{ color: var(--ink-2); overflow-wrap: anywhere; }
+.jerico-ui .out .l.ok .v{ color: var(--live); }
+.jerico-ui .out .l.bad .v{ color: var(--down); }
+
+.jerico-ui /* the scan: a hairline sweeping its own track — the only motion here */
+.scan{ margin-top: 22px; height: 1px; background: var(--rule); position: relative; overflow: hidden; }
+.jerico-ui .scan::after{
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 38%;
+  background: linear-gradient(90deg, transparent, var(--ink-3), transparent);
+  animation: sweep 1.5s var(--ease) infinite;
+}
+@keyframes sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(365%); }
+}
+
+.jerico-ui /* ── capability list ──────────────────────────────────────────────── */
+
+.caps{ margin-top: 20px; border-top: 1px solid var(--rule); }
+.jerico-ui .caps > div{ padding: 13px 0; border-bottom: 1px solid var(--rule); }
+.jerico-ui .caps .ct{ font-size: 13px; font-weight: 500; letter-spacing: -.005em; color: var(--ink); }
+.jerico-ui .caps .cd{ margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); max-width: 40ch; }
+
+.jerico-ui details{ margin-top: 16px; }
+.jerico-ui details summary{
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); cursor: pointer; list-style: none; padding: 3px 0;
+}
+.jerico-ui details summary::-webkit-details-marker{ display: none; }
+.jerico-ui details summary::before{ content: "+ "; color: var(--ink-ghost); }
+.jerico-ui details[open] summary::before{ content: "− "; }
+.jerico-ui details summary:hover{ color: var(--ink); }
+.jerico-ui details summary:focus-visible{ outline: 1px solid var(--ink-3); outline-offset: 2px; }
+
+.jerico-ui .tech{ margin-top: 10px; padding-left: 13px; border-left: 1px solid var(--rule); }
+.jerico-ui .tech .tl{
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-ghost); margin: 12px 0 6px;
+}
+.jerico-ui .tech .tl:first-child{ margin-top: 0; }
+.jerico-ui .tech ul{ margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.jerico-ui .tech li,
+.jerico-ui .tech p{ margin: 0; font-size: 12px; line-height: 1.55; color: var(--ink-2); }
+
+.jerico-ui /* ── command line the user has to run themselves ──────────────────── */
+
+.cmd{
+  margin-top: 9px; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; background: #131312; border: 1px solid var(--edge); border-radius: 2px;
+}
+.jerico-ui .cmd code{ border: 0; background: none; padding: 0; font-size: 11.5px; flex: 1; overflow-x: auto; white-space: nowrap; }
+.jerico-ui .cmd .copy{
+  flex: none; font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); background: none; border: 0; padding: 2px 0; cursor: pointer;
+  transition: color .14s var(--ease);
+}
+.jerico-ui .cmd .copy:hover{ color: var(--ink); }
+.jerico-ui .cmd .copy:focus-visible{ outline: 1px solid var(--ink-3); outline-offset: 2px; }
+
+.jerico-ui /* the one place colour carries weight, because macOS's own wording is
+   the thing being quoted and getting it wrong costs the user a reinstall */
+.callout{
+  margin-top: 10px; padding: 9px 11px; border-left: 2px solid var(--hold);
+  background: rgba(255, 181, 71, .06);
+  font-size: 12px; line-height: 1.55; color: #e8d9bd; max-width: 42ch;
+}
+.jerico-ui .callout b{ color: var(--hold); font-weight: 500; }
+
+.jerico-ui /* ── consent checkbox ─────────────────────────────────────────────── */
+
+.consent{ position: relative; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin-bottom: 4px; }
+.jerico-ui .consent input{ position: absolute; opacity: 0; pointer-events: none; }
+.jerico-ui .consent .box{
+  width: 14px; height: 14px; margin-top: 2px; flex: none;
+  border: 1px solid var(--edge); border-radius: 2px; display: grid; place-items: center;
+  transition: background .15s var(--ease), border-color .15s var(--ease);
+}
+.jerico-ui .consent .box::after{
+  content: ""; width: 6px; height: 6px; background: var(--bg);
+  transform: scale(0); transition: transform .15s var(--ease);
+}
+.jerico-ui .consent input:checked + .box{ background: var(--ink); border-color: var(--ink); }
+.jerico-ui .consent input:checked + .box::after{ transform: scale(1); }
+.jerico-ui .consent input:focus-visible + .box{ outline: 1px solid var(--ink-3); outline-offset: 3px; }
+.jerico-ui .consent span.t{ font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.jerico-ui .consent:hover span.t{ color: var(--ink); }
+
+/* ── the update window ────────────────────────────────────────────────
+   From → to, stated in mono at a size you read rather than squint at, with
+   the thing being installed carrying the ink and the thing being replaced
+   stepping back. */
+
+.jerico-ui .vers { display: flex; align-items: baseline; gap: 14px; margin-top: 20px; }
+.jerico-ui .vers .v {
+  font-family: var(--mono); font-size: 21px; font-weight: 500;
+  letter-spacing: -.02em; color: var(--ink-3);
+}
+.jerico-ui .vers .v.to { color: var(--ink); }
+.jerico-ui .vers .ar { color: var(--ink-ghost); font-size: 15px; }
+.jerico-ui .vers .tagline {
+  margin-left: auto; font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-ghost);
+}
+
+/* A 2px rule that fills. The indeterminate variant sweeps rather than fakes
+   progress, because a bar that invents a percentage is a bar that lies. */
+.jerico-ui .bar { margin-top: 20px; }
+.jerico-ui .bar .track { height: 2px; background: rgba(255, 255, 255, .07); position: relative; overflow: hidden; }
+.jerico-ui .bar .track i { display: block; height: 2px; background: var(--ink); width: 0; transition: width .35s linear; }
+.jerico-ui .bar .track.indet i { width: 34%; animation: bar-sweep 1.35s var(--ease) infinite; }
+@keyframes bar-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+.jerico-ui .bar .row {
+  margin-top: 8px; display: flex; align-items: baseline; gap: 10px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; color: var(--ink-3);
+}
+.jerico-ui .bar .row .r { margin-left: auto; color: var(--ink-ghost); }
+
+/* Labelled notes: the things the user needs to know before committing, each
+   under a word that says what kind of thing it is. */
+.jerico-ui .notes { margin-top: 22px; border-top: 1px solid var(--rule); list-style: none; padding: 0; }
+.jerico-ui .notes > * { padding: 11px 0; border-bottom: 1px solid var(--rule); display: flex; gap: 12px; align-items: baseline; }
+.jerico-ui .notes .k {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-ghost); min-width: 74px; flex: none;
+}
+.jerico-ui .notes .t { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.jerico-ui .notes .t b { color: var(--ink); font-weight: 500; }
+
+/* The updater's own words, quoted rather than paraphrased — a user searching
+   for the error needs the string the tool actually produced. */
+.jerico-ui .errbox {
+  margin-top: 20px; padding: 11px 13px; border-left: 2px solid var(--down);
+  background: rgba(240, 101, 94, .06); max-width: 44ch;
+}
+.jerico-ui .errbox .h {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--down); margin-bottom: 5px;
+}
+.jerico-ui .errbox .m { font-family: var(--mono); font-size: 11.5px; color: #f3c4c1; line-height: 1.5; word-break: break-word; }
+.jerico-ui .errbox .w { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+/* ── manage ───────────────────────────────────────────────────────────── */
+
+.jerico-ui .kv {
+  display: flex; flex-direction: column; gap: 3px; margin-top: 4px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .02em;
+}
+.jerico-ui .kv .l { display: flex; gap: 10px; }
+.jerico-ui .kv .l .k { color: var(--ink-ghost); min-width: 78px; flex: none; }
+.jerico-ui .kv .l .v { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.jerico-ui .sel {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink);
+  background: #131312; border: 1px solid var(--edge); border-radius: 2px;
+  padding: 7px 9px; cursor: pointer;
+}
+.jerico-ui .sel:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; }
+
+/* The removal register: the only place in the app allowed to be red, because
+   it is the only action that cannot be taken back. */
+.jerico-ui .btn-danger { border-color: rgba(240, 101, 94, .45); color: var(--down); background: transparent; }
+.jerico-ui .btn-danger:hover:not(:disabled) { border-color: var(--down); background: rgba(240, 101, 94, .08); }
+.jerico-ui .btn-danger:disabled { color: var(--ink-ghost); border-color: var(--rule); cursor: not-allowed; }
+
+.jerico-ui .danger { border-color: rgba(240, 101, 94, .3) !important; }
+.jerico-ui .danger .rt { color: #ffb3ae; }
+.jerico-ui .confirm {
+  margin-top: 12px; padding: 12px 13px;
+  border-left: 2px solid var(--down); background: rgba(240, 101, 94, .05);
+}
+.jerico-ui .confirm .cc { position: relative; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.jerico-ui .confirm input { position: absolute; opacity: 0; pointer-events: none; }
+.jerico-ui .confirm .box {
+  width: 14px; height: 14px; margin-top: 2px; flex: none;
+  border: 1px solid rgba(240, 101, 94, .5); border-radius: 2px; display: grid; place-items: center;
+  transition: background .15s var(--ease), border-color .15s var(--ease);
+}
+.jerico-ui .confirm .box::after {
+  content: ""; width: 6px; height: 6px; background: #1a0e0d;
+  transform: scale(0); transition: transform .15s var(--ease);
+}
+.jerico-ui .confirm input:checked + .box { background: var(--down); border-color: var(--down); }
+.jerico-ui .confirm input:checked + .box::after { transform: scale(1); }
+.jerico-ui .confirm input:focus-visible + .box { outline: 1px solid var(--down); outline-offset: 3px; }
+.jerico-ui .confirm .t { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.jerico-ui .confirm .t ul { margin: 6px 0 0; padding-left: 16px; }
+.jerico-ui .confirm .t li { margin: 2px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

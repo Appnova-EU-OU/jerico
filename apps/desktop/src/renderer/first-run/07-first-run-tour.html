@@ -1,0 +1,1893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jerico — First launch, the Dia structure</title>
+<link rel="stylesheet" href="_fonts.css">
+<style>
+/* Archivo + IBM Plex Mono come from _fonts.css in this directory. */
+:root {
+  --bg: #0b0b0b; --ink: #f2f0ec; --ink-2: #a5a19a; --ink-3: #8e8a83; --ink-ghost: #5b5852;
+  --rule: #232322; --rule-2: #34342f;
+  --live: #6fdca0; --hold: #ffb547; --down: #f0655e;
+  --display: "Archivo", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(.2,.7,.2,1);
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--display); font-size: 15px; line-height: 1.58;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::selection { background: var(--ink); color: var(--bg); }
+
+.plate { max-width: 1180px; margin: 0 auto; padding: clamp(26px,4.5vw,54px) clamp(18px,4vw,40px) 90px; }
+.slug {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-ghost);
+  padding-bottom: 13px; border-bottom: 1px solid var(--rule);
+}
+.slug .r { margin-left: auto; }
+h1 {
+  margin: 26px 0 0; font-size: clamp(30px, 5.4vw, 54px);
+  font-weight: 600; font-stretch: 118%; letter-spacing: -.028em;
+  line-height: 1.02; text-wrap: balance;
+}
+h1 em { font-style: normal; font-weight: 300; font-stretch: 125%; letter-spacing: -.012em; }
+.lede { margin: 16px 0 0; max-width: 62ch; color: var(--ink-2); font-size: 15px; }
+
+/* ── the stage is a desktop, because that is what the intro sits on ────── */
+.stage {
+  position: relative; margin-top: 28px; aspect-ratio: 16/10;
+  border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+  /* a stand-in for the user's wallpaper — the point is that it stays visible */
+  background:
+    radial-gradient(58% 44% at 18% 22%, #8ea6d8 0%, transparent 62%),
+    radial-gradient(52% 46% at 82% 30%, #f0d8a8 0%, transparent 60%),
+    radial-gradient(64% 52% at 62% 88%, #e0a2a8 0%, transparent 62%),
+    linear-gradient(148deg, #6f86bd 0%, #b9c3dd 44%, #efd7b4 78%, #dda9a6 100%);
+}
+.desk-bar {
+  position: absolute; inset: 0 0 auto 0; height: 26px; z-index: 2;
+  display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%);
+  font-family: var(--mono); font-size: 10.5px; color: rgba(20,20,20,.68);
+}
+.desk-bar .sp { flex: 1; }
+.desk-win {
+  position: absolute; z-index: 1; border-radius: 9px;
+  background: rgba(252,251,249,.9); box-shadow: 0 24px 60px -20px rgba(20,26,50,.45);
+  border: 1px solid rgba(255,255,255,.6);
+}
+.desk-win .tb { height: 26px; border-bottom: 1px solid rgba(0,0,0,.07); display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.desk-win .tb i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.desk-win .body { padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+.desk-win .body span { display: block; height: 7px; border-radius: 3px; background: rgba(20,26,50,.11); }
+
+/* the scrim is its own layer so the plate can sit above it and the desktop below */
+/* Not a blackout — a wash. Dia never hides the desktop; it cools it and lets
+   its own light warm it back. Neutral black reads as a curtain, so the wash
+   carries a hue: deep blue-graphite above, ember-warmed below. */
+
+/* ── present mode ──────────────────────────────────────────────────────────
+   `?present` or `#present`: the review document steps out of the way and the
+   stage becomes the whole screen. Not a different drawing — the same stage, with
+   the plate, the beat table, the notes and the scrubber removed and the frame
+   unbounded, so the piece can be watched as a piece instead of read as a spec.
+   The HUD stays: Skip must remain reachable, and it is still the first tab stop. */
+body.present { overflow: hidden; background: #000; }
+body.present .plate { max-width: none; margin: 0; padding: 0; }
+body.present .slug, body.present h1, body.present .lede,
+body.present .scrub, body.present .beats, body.present .annot { display: none; }
+/* Letterboxed, not stretched. The stage's canvas has a 1280x800 backing store
+   drawn at 100%/100%, so an unbounded stage on a screen that is not 16:10
+   squashes the film — measured on this machine, 1512x982 is 1.54 and the whole
+   frame came out short. It keeps its ratio and the screen keeps the difference. */
+body.present .stage {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  margin: 0; border: 0; border-radius: 0;
+  width: min(100vw, 160vh); height: min(100vh, 62.5vw);
+  aspect-ratio: 16 / 10;
+}
+/* Product/flow mode keeps the real desktop beneath the film. The wallpaper,
+   menu bar and windows above are review fixtures only. */
+body.app, body.app.present, body.app.present .stage { background: transparent; }
+body.app .desk-bar, body.app .desk-win { display: none; }
+body.app { cursor: none; }
+
+/* ── the lit subject ───────────────────────────────────────────────────────
+   The statement used to carry a dark falloff, which meant the thing being
+   described was DIMMED to make its description legible — backwards. This is the
+   film's own move instead, the one the warm bleed already uses: `plus-lighter`
+   adds light and leaves transparency alone, so the subject brightens while
+   everything else stays where it was. Sized and placed from the subject's own
+   measured box, feathered so it reads as light rather than as a box. */
+/* ── the lit box ───────────────────────────────────────────────────────────
+   Square and definite, and the fill is NOT flat. A flat additive tint is fine
+   on something small and turns a large subject into a milky panel — measured on
+   the written block, where .13 over 900 x 330 read as a grey sheet laid over the
+   terminal and swallowed its own edge. So fill and edge are separated: the edge
+   is always a crisp hairline, and the fill is set per subject from its area
+   (`--fill`), close to nothing when the box is big.
+
+   What is left doing the work is the boundary, treated the way this language
+   treats everything else — a hairline, and light rather than pigment. It pools
+   toward the BOTTOM edge, because the film's own dawn rises from below the frame
+   and a box lit from above would contradict it.
+
+   Two diagonal corner marks, top-left and bottom-right. A registration mark is
+   editorial vocabulary, which is where this whole language comes from, and two
+   corners state the rectangle more precisely than four decorate it. */
+/* z-index 6, not 5: `#cardlayer` is also 5 and comes later in the DOM, so the card
+   painted over the light and both of its own subjects — the headline and the limits
+   register — were lit behind it and therefore invisible. The pointer stays above
+   both. */
+#lit { position: absolute; z-index: 6; opacity: 0; pointer-events: none;
+  --fill: .10; --edge: .40;
+  mix-blend-mode: plus-lighter; border-radius: 2px;
+  background: linear-gradient(to top, rgba(255,236,198,var(--fill)), rgba(255,236,198,0) 72%);
+  box-shadow: inset 0 0 0 1px rgba(255,244,214,var(--edge)),
+              inset 0 -1px 0 0 rgba(255,248,228,calc(var(--edge) * 1.5)); }
+/* the mark scales with the box: a fixed 13px corner ran nearly the whole side of
+   a 38 x 29 subject and read as a broken border rather than a mark */
+#lit::before, #lit::after {
+  content: ""; position: absolute; width: var(--mark, 13px); height: var(--mark, 13px);
+  border-color: rgba(255,250,232,calc(var(--edge) * 1.9)); border-style: solid; border-width: 0;
+}
+#lit::before { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
+#lit::after { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
+
+/* On a LIGHT ground additive light cannot point at anything — measured on the
+   tray glyph over the wallpaper, where `plus-lighter` at .16 saturated to a white
+   square and swallowed the mark inside it. There the box stops being a light and
+   becomes a frame: no fill, a dark hairline, normal blending. Same rectangle,
+   same corners, opposite polarity — which is the same idea either way, marking
+   the subject with the least ink that will read on what it sits on. */
+#lit.on-light { mix-blend-mode: normal; background: none;
+  box-shadow: inset 0 0 0 1px rgba(12,14,20,.52), inset 0 -1px 0 0 rgba(12,14,20,.66); }
+#lit.on-light::before, #lit.on-light::after { border-color: rgba(12,14,20,.78); }
+
+/* ── the announced track ────────────────────────────────────────────────── */
+/*  The statements ARE the content, and they are painted onto a canvas, which
+    means a screen reader gets a focused surface that says nothing at all — the
+    film's oldest open item, inherited by all three of these. So the same text
+    is also carried in a polite live region: not a description of the picture,
+    which would be narration, but the one line the picture is there to deliver.
+    Announced once each, in order, and the way out is stated up front. */
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+#scrim { position: absolute; inset: 0; z-index: 2; opacity: 0;
+  background: linear-gradient(180deg, #070a12 0%, #0a0b10 46%, #120c08 100%); }
+/* the dawn spilling onto the desktop itself. `screen` is safe here and only
+   here: this layer has no dark content — where the glow is absent it is black,
+   and black is screen's no-op. The light canvas could never be blended this way. */
+#bleed { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none;
+  /* plus-lighter, not screen. In the shipped intro the window is transparent,
+     and screen blends against the stacking context's own backdrop rather than
+     the desktop — it can print a dark box. plus-lighter composites additively
+     and leaves transparency alone, which is the actual intent: add light. */
+  mix-blend-mode: plus-lighter;
+  background:
+    radial-gradient(120% 62% at 50% 104%, rgba(255,168,74,.62) 0%, rgba(196,92,26,.26) 34%, rgba(0,0,0,0) 68%),
+    radial-gradient(70% 40% at 50% 88%, rgba(255,214,150,.34) 0%, rgba(0,0,0,0) 70%); }
+#light { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; display: block; pointer-events: none; }
+canvas#cv { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; display: block; }
+
+/* ══ THE TOUR'S SURFACE ════════════════════════════════════════════════
+   Everything to the next banner is 05-agent-limits.html's card, lifted. Do
+   not "improve" it here — edit 05 and copy across, or the two drift, and the
+   tour's only claim is that this is the shipped surface.
+
+   The card carries the popover's own three token values rather than the
+   film's: --ink-ghost is #807d74 on that surface and #5b5852 in this
+   document's furniture, and the card must look like the product, not like
+   the review page it is pasted into. */
+#cardlayer {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 800px;
+  z-index: 5; transform-origin: 0 0; pointer-events: none;
+}
+/* Where a menu-bar popover actually is: hanging off the tray, near the right
+   edge, not centred. TRAY.x − 217 puts the notch under the icon; 24px of margin
+   is what the shipped popover keeps off the screen edge. The composition this
+   produces is also the better one — card right, the line low and left, the
+   light between them. */
+#card {
+  --win: #0e0e0d; --edge: #63605a; --ink-ghost: #807d74;
+  position: absolute; left: 888px; top: 36px; width: 368px;
+  opacity: 0; will-change: opacity, transform;
+}
+/* the notch, aligned under the tray icon: TRAY.x (1105) − card left (888) */
+.pop .notch {
+  position: absolute; top: -6px; left: 217px; margin-left: -7px;
+  width: 14px; height: 7px; z-index: 3;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); background: #131312;
+}
+
+/* the pointer gets its own canvas ABOVE the card. Drawn rather than a DOM
+   element because it has to be able to sit over the card in beat two, and
+   because it is a picture, not a control. */
+#curs { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%;
+  display: block; pointer-events: none; }
+
+#trayglyph { display: inline-flex; opacity: 0; color: rgba(20,20,20,.78); }
+.hud { z-index: 8 !important; }
+.gate { z-index: 9 !important; }
+
+.pop { --state: var(--live); position: relative; border-radius: 10px; background: var(--win);
+  border: 1px solid rgba(255,255,255,.075); overflow: hidden;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.75), 0 18px 44px -12px rgba(0,0,0,.92); }
+.pop[data-tone=hold] { --state: var(--hold); }
+.pop[data-tone=down] { --state: var(--down); }
+
+.pop .id { display: flex; align-items: center; gap: 7px; padding: 10px 15px 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .04em; color: var(--ink-ghost); white-space: nowrap; }
+.pop .id b { font-weight: 400; color: var(--ink-3); }
+.pop .reading { padding: 5px 15px 0; display: flex; align-items: flex-start; gap: 10px; }
+.pop .marker { width: 7px; height: 7px; margin-top: 14px; background: var(--state); flex: none; }
+.pop .reading h2 { margin: 0; font-size: 33px; font-weight: 300; font-stretch: 125%;
+  letter-spacing: -.028em; line-height: 1.04; color: var(--ink); }
+.pop .sub { padding: 3px 15px 0 32px; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: .03em; color: var(--ink-3); }
+.pop .sub .st { color: var(--state); }
+.pop .trace { position: relative; margin: 11px 0 0; height: 54px; }
+.pop .trace canvas { display: block; width: 100%; height: 54px; }
+.pop .trace .rtt { position: absolute; right: 15px; top: 2px; font-family: var(--mono);
+  font-size: 10px; letter-spacing: .06em; color: var(--ink-ghost);
+  background: linear-gradient(90deg, transparent, var(--win) 24%); padding-left: 20px; }
+.pop .trace .rtt b { font-weight: 500; color: var(--ink-2); }
+.pop .rule { height: 1px; background: rgba(255,255,255,.06); }
+.pop .sec { padding: 10px 15px 11px; }
+.pop .sec > h3 { margin: 0 0 6px; font-family: var(--mono); font-size: 10px; font-weight: 400;
+  letter-spacing: .06em; color: var(--ink-ghost); display: flex; align-items: baseline; gap: 8px; }
+.pop .sec > h3 .n { margin-left: auto; opacity: .85; }
+
+.pop .panels { display: flex; flex-direction: column; gap: 3px; }
+.pop .panels .p { display: flex; align-items: baseline; gap: 9px; margin: 0;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .01em; }
+.pop .panels .p .agent { color: var(--ink); min-width: 52px; }
+.pop .panels .p .proj { color: var(--ink-3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop .panels .p .m { color: var(--ink-ghost); }
+
+.pop .lim { display: flex; flex-direction: column; gap: 4px; }
+.pop .lim .a { display: grid; align-items: center; gap: 0 10px; font-family: var(--mono);
+  font-size: 11px; letter-spacing: .01em; grid-template-columns: 92px 1fr 46px 62px; }
+.pop .lim .a .who { color: var(--ink); white-space: nowrap; }
+.pop .lim .a .pct { color: var(--ink-2); text-align: right; }
+.pop .lim .a .pct b { font-weight: 500; }
+.pop .lim .a .rst { color: var(--ink-ghost); text-align: right; }
+.pop .lim .a[data-tone=warn] .pct b { color: var(--hold); }
+.pop .lim .a[data-tone=none] .who { color: var(--ink-3); }
+/* built from elements, not block glyphs: U+2588 is not guaranteed in every
+   fallback and a missing glyph would print a meter of tofu */
+.pop .cells { display: flex; gap: 1.5px; align-items: center; height: 11px; }
+.pop .cells i { display: block; width: 4px; height: 7px; background: var(--rule-2); border-radius: .5px; }
+.pop .cells i.on { background: var(--ink-3); }
+.pop .a[data-tone=warn] .cells i.on { background: var(--hold); }
+/* unknown is not zero: a broken hairline, never fourteen empty cells */
+.pop .nodata { display: block; height: 1px; margin-right: 6px;
+  background: repeating-linear-gradient(90deg, var(--rule-2) 0 4px, transparent 4px 7px); }
+.pop .limbtn { display: block; width: 100%; margin-top: 10px; padding: 9px 14px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .09em;
+  text-transform: uppercase; background: transparent; color: var(--ink-2);
+  border: 1px solid var(--edge); border-radius: 2px; }
+
+.pop .log { display: flex; flex-direction: column; gap: 1px; overflow: hidden; max-height: 52px; }
+.pop .log .ln { display: flex; gap: 8px; white-space: nowrap; font-family: var(--mono);
+  font-size: 10.5px; line-height: 1.56; }
+.pop .log .ln .t { color: var(--ink-ghost); flex: none; }
+.pop .log .ln .e { color: var(--ink-3); flex: none; }
+.pop .log .ln .v { color: var(--ink-ghost); overflow: hidden; text-overflow: ellipsis; }
+.pop .log .ln:last-child .e { color: var(--ink); }
+.pop .log .ln:last-child .v { color: var(--ink-3); }
+
+.pop .acts { padding: 11px 15px 12px; display: flex; flex-direction: column; align-items: stretch; }
+.pop .go { align-self: stretch; display: inline-flex; align-items: center; justify-content: center;
+  margin-bottom: 8px; padding: 10px 14px; font-family: var(--mono); font-size: 11px; font-weight: 500;
+  letter-spacing: .09em; text-transform: uppercase; background: var(--ink); color: var(--bg);
+  border: 1px solid var(--ink); border-radius: 2px; }
+.pop .verbs { display: flex; flex-direction: column; align-items: flex-start; }
+.pop .verb { padding: 5px 0; font-family: var(--display); font-size: 13.5px;
+  color: var(--ink-2); background: none; border: 0; text-align: left; }
+.pop .foot { display: flex; align-items: baseline; gap: 11px; padding: 9px 15px 11px;
+  border-top: 1px solid rgba(255,255,255,.06); font-family: var(--mono); font-size: 10px; letter-spacing: .06em; }
+.pop .foot .v { color: var(--ink-ghost); flex: 1; }
+.pop .foot button { font: inherit; color: var(--ink-3); background: none; border: 0; padding: 2px 0; }
+.pop .foot .d { color: var(--ink-ghost); opacity: .55; }
+
+/* ── the wash ──────────────────────────────────────────────────────────
+   How beat two says "this part". Borrowed from the film rather than invented:
+   .42, the same measured value the scrim uses, on the same ground that past
+   about .45 a wash stops being a room with the lights down and becomes a
+   curtain. The rest of the card stays readable, because someone who cannot
+   read the card cannot place the part being pointed at. */
+.pop .washable { transition: opacity .34s var(--ease); }
+.pop.washing .washable { opacity: .42; }
+.pop.washing .subject { opacity: 1; }
+/* ══════════════════════════════════════════════════════════════════════ */
+
+.hud { position: absolute; inset: auto 0 0 0; z-index: 5; display: flex; align-items: center; padding: 0 16px 14px; pointer-events: none; }
+.hud button {
+  pointer-events: auto; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase; color: rgba(242,240,236,.6);
+  background: rgba(20,20,20,.35); border: 0; border-radius: 2px; padding: 6px 10px; cursor: pointer;
+  transition: color .15s var(--ease), background .15s var(--ease);
+}
+.hud button:hover { color: #fff; background: rgba(20,20,20,.55); }
+.hud .sp { flex: 1; order: 2; }
+.hud #mute { order: 1; }
+.hud #skip { order: 3; }
+
+.gate { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(11,11,11,.86); }
+.gate[hidden] { display: none; }
+.gate .in { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gate p { margin: 0; max-width: 38ch; font-size: 12.5px; color: var(--ink-3); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .09em;
+  text-transform: uppercase; padding: 12px 20px; border-radius: 2px;
+  border: 1px solid var(--ink); background: var(--ink); color: var(--bg); cursor: pointer;
+  transition: background .18s var(--ease), transform .12s var(--ease);
+}
+.btn:hover { background: #fff; }
+.btn:active { transform: scale(.985); }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--rule-2); }
+.btn-ghost:hover { background: #121212; border-color: var(--ink-3); }
+
+.scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.scrub input[type=range] { flex: 1; accent-color: #f2f0ec; height: 3px; }
+.scrub .t { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); min-width: 78px; }
+.scrub .note { font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-ghost); }
+
+.beats { margin-top: 38px; border-top: 1px solid var(--rule); }
+.beats > div { display: flex; gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+.beats .tt { font-family: var(--mono); font-size: 10.5px; color: var(--ink-ghost); min-width: 80px; flex: none; }
+.beats .nm { font-size: 13.5px; font-weight: 500; color: var(--ink); min-width: 128px; flex: none; }
+.beats .ds { font-size: 13px; color: var(--ink-2); }
+.beats .ds b { color: var(--ink); font-weight: 500; }
+@media (max-width: 640px) { .beats > div { flex-direction: column; gap: 4px; } }
+
+.annot { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--rule);
+         display: grid; gap: 26px 44px; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); }
+.annot section { display: flex; flex-direction: column; gap: 7px; }
+.annot h3 { margin: 0; font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+            letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+.annot p { margin: 0; font-size: 13.5px; color: var(--ink-2); max-width: 44ch; }
+code { font-family: var(--mono); font-size: 12px; color: var(--ink);
+       background: #121212; border: 1px solid var(--rule); border-radius: 2px; padding: .5px 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="plate">
+
+  <div class="slug">
+    <span>Jerico</span><span>First launch</span>
+    <span class="r">Proposal 07 · rev A — the film, and two beats after it</span>
+  </div>
+
+  <h1>Your desktop, dimmed —<br><em>and then the thing itself</em>.</h1>
+
+  <p class="lede">
+    <b>The film is untouched.</b> Every number from 0 to 13.6 is the shipped one: the wash coming
+    up over your own wallpaper, the studio credit, the shader dawn, the mark drawn by the
+    travelling light, the bell on the third branch, the lockup holding its beat. Scrub it and
+    compare against <code>04-first-launch-intro.html</code> — they are the same frames.
+  </p>
+  <p class="lede">
+    What changed is that the film no longer <em>closes</em> at 13.8. That close was never part of
+    the film's front half; it came forward when act two was cut, and it goes back where it was.
+    In the space are two beats, and the surface in them is the product's own popover — not a
+    picture of it, not a diagram of it. Four approaches to act two were tried and rejected, three
+    of them by reaching for diagram vocabulary. This is the path the record named as untried: the
+    real surface at real density, narrowed to the two beats that have something true to show.
+  </p>
+
+  <div class="stage" id="stage">
+    <p class="sr">Jerico first-run sequence. Press Escape or Skip to leave it.</p>
+      <div class="sr" role="status" aria-live="polite" id="say"></div>
+    <div class="desk-bar" aria-hidden="true">
+      <strong style="font-weight:600">Finder</strong><span>File</span><span>Edit</span><span>View</span>
+      <span class="sp"></span>
+      <!-- The mark does not FLY here — it appears here, which is the honest
+           version of the idea that was cut. It is part of the desktop, so the
+           wash dims it like everything else on the desktop. In the app this is
+           the real tray icon and nothing draws it. -->
+      <span id="trayglyph"></span>
+      <span>Fri 7 Aug&nbsp;&nbsp;06:14</span>
+    </div>
+    <div class="desk-win" style="left:8%;top:22%;width:40%;height:44%" aria-hidden="true">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="body"><span style="width:72%"></span><span style="width:88%"></span><span style="width:54%"></span><span style="width:80%"></span></div>
+    </div>
+    <div class="desk-win" style="left:44%;top:40%;width:44%;height:46%" aria-hidden="true">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="body"><span style="width:64%"></span><span style="width:90%"></span><span style="width:46%"></span></div>
+    </div>
+
+    <div id="lit"></div>
+    <div id="scrim" aria-hidden="true"></div>
+    <div id="bleed" aria-hidden="true"></div>
+    <canvas id="light" aria-hidden="true"></canvas>
+    <canvas id="cv" width="1280" height="800"></canvas>
+    <canvas id="curs" width="1280" height="800" aria-hidden="true"></canvas>
+
+    <!-- The tour's surface. NOT painted into the canvas: this is
+         05-agent-limits.html's own popover markup, and in the app it is the
+         real Popover.svelte with a fixture in place of the daemon. The layer
+         is 1280 × 800 and scaled to the stage, so a 368pt card here means what
+         368pt means to the canvas beside it. -->
+    <div id="cardlayer" aria-hidden="true">
+      <div id="card" class="pop" data-tone="live">
+        <!-- it hangs from the tray, so it has the notch that says so -->
+        <span class="notch"></span>
+        <div class="washable">
+          <div class="id"><b>mbp-14</b><span>→</span><span>lcars.jerico.appnova.io</span></div>
+          <div class="reading"><span class="marker"></span><h2>3 panels</h2></div>
+          <div class="sub"><span class="st">connected</span><span> · up 04:21</span></div>
+          <div class="trace"><canvas id="tcv" width="736" height="108"></canvas><span class="rtt"><b>34</b> ms</span></div>
+        </div>
+
+        <div class="rule"></div>
+        <section class="sec washable">
+          <h3>panels <span class="n">3 running</span></h3>
+          <div class="panels">
+            <div class="p"><span class="agent">claude</span><span class="proj">jerico</span><span class="m">ctx 41%</span></div>
+            <div class="p"><span class="agent">claude</span><span class="proj">orca</span><span class="m">ctx 18%</span></div>
+            <div class="p"><span class="agent">kimi</span><span class="proj">jerico</span><span class="m">ctx —</span></div>
+          </div>
+        </section>
+
+        <div class="rule"></div>
+        <!-- beat two's subject. Three rows, three different truths: a window
+             near its ceiling with a reset, a window the provider returned with
+             no reset at all, and an agent no watcher exists for — drawn as a
+             hairline, because an empty gauge reads as plenty left. -->
+        <section class="sec washable subject">
+          <h3>limits <span class="n">2 of 3 reported</span></h3>
+          <div class="lim">
+            <div class="a" data-tone="warn">
+              <span class="who">claude</span>
+              <span class="cells"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>
+              <span class="pct"><b>86%</b></span><span class="rst">1h 06m</span>
+            </div>
+            <div class="a" data-tone="">
+              <span class="who">codex</span>
+              <span class="cells"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="pct"><b>24%</b></span><span class="rst">no reset</span>
+            </div>
+            <div class="a" data-tone="none">
+              <span class="who">kimi</span>
+              <span class="nodata"></span>
+              <span class="pct"><b>—</b></span><span class="rst">—</span>
+            </div>
+          </div>
+          <button class="limbtn" tabindex="-1">usage detail →</button>
+        </section>
+
+        <div class="rule"></div>
+        <section class="sec washable">
+          <h3>activity <span class="n">3 recorded</span></h3>
+          <div class="log">
+            <div class="ln"><span class="t">10:51:12</span><span class="e">daemon.start</span><span class="v">launchd · pid 4192</span></div>
+            <div class="ln"><span class="t">11:02:51</span><span class="e">panel.spawn</span><span class="v">kimi · jerico</span></div>
+            <div class="ln"><span class="t">11:04:02</span><span class="e">health</span><span class="v">green · rtt 34 ms</span></div>
+          </div>
+        </section>
+
+        <div class="rule"></div>
+        <div class="acts washable">
+          <button class="go" tabindex="-1">Open Jerico</button>
+          <div class="verbs"><button class="verb" tabindex="-1">Stop daemon</button></div>
+        </div>
+        <div class="foot washable">
+          <span class="v">0.24.1</span>
+          <button tabindex="-1">manage</button><span class="d">/</span>
+          <button tabindex="-1">updates</button><span class="d">/</span>
+          <button tabindex="-1">logs</button><span class="d">/</span>
+          <button tabindex="-1">quit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skip is FIRST in the DOM and therefore the first tab stop, while `order`
+         keeps it drawn on the right. Someone arriving here on a keyboard or a
+         screen reader should reach the way out before anything else — the
+         announced line says one is there, and the first Tab must land on it. -->
+    <div class="hud">
+      <button type="button" id="skip">Skip</button>
+      <button type="button" id="mute">♪ sound on</button>
+      <span class="sp"></span>
+    </div>
+
+    <div class="gate" id="gate">
+      <div class="in">
+        <button type="button" class="btn" id="play">Play the intro</button>
+        <p>The score is synthesised in the page, so it cannot drift from the picture. Browsers need a click before any audio.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrub">
+    <span class="t" id="tlabel">0.00 / 28.2s</span>
+    <!-- max is set from DUR in script, not left here: it was 1620 for the
+         16.2s cut and would have refused to scrub into the tour. -->
+    <input type="range" id="range" min="0" max="2820" value="0" aria-label="Scrub the timeline" />
+    <button type="button" class="btn btn-ghost" id="replay" style="padding:8px 12px">Replay</button>
+    <span class="note">scrub is silent</span>
+  </div>
+
+  <div class="beats">
+    <div><span class="tt">0.0 – 1.5</span><span class="nm">The room dims</span><span class="ds">Your desktop is right there and it stays there. It starts at nothing and a wash comes up over a second and a half, cooling it by about a third — never a curtain, and never a step. A low drone comes up underneath.</span></div>
+    <div><span class="tt">1.4 – 5.3</span><span class="nm">Who made this</span><span class="ds">A film credit, set at a size you can actually read from a normal viewing distance, holding for two full seconds before it leaves. Dia spends this beat the same way — the studio gets its moment before the product does.</span></div>
+    <div><span class="tt">4.5 – 8.2</span><span class="nm">First light</span><span class="ds">A glow rises from below the frame and warms the whole field. <b>Drawn, not filmed</b> — a rendered gradient stays perfectly smooth where video compression bands.</span></div>
+    <div><span class="tt">8.6 – 10.1</span><span class="nm">The mark</span><span class="ds">The light flares white, then contracts — and what is left of it is the mark. One node fanning out to three. A single transient lands on it.</span></div>
+    <div><span class="tt">10.1 – 13.6</span><span class="nm">The lockup holds</span><span class="ds">The wordmark sets under the mark and the two stand together for a full beat. <b>Nothing moves and no music plays.</b> Dia's own track goes quiet here and stays quiet — the restraint is the point.</span></div>
+    <div><span class="tt">13.6 – 15.5</span><span class="nm">The card opens</span><span class="ds">The lockup dissolves on schedule — <b>this beat is unchanged</b> — and the popover opens from its own middle, which is where the mark just was. The dawn does not leave with the mark; it drops to a third and lights the card from underneath. A low push, no bell: the product comes out of the logo, so it does not get a second strike.</span></div>
+    <div><span class="tt">15.5 – 19.7</span><span class="nm">Where Jerico lives</span><span class="ds">The card stands, whole and legible: machine, server, what is connected, what is running here, the heartbeat. One mono line types itself bottom-left — <b>the mark in your menu bar is this Mac</b> — over fourteen clicks and nothing else.</span></div>
+    <div><span class="tt">19.7 – 23.9</span><span class="nm">What is running out</span><span class="ds">The card washes to .42 except the limits register, which stays lit. <b>claude 86%</b> with a reset, codex with a utilization and no reset, kimi with no watcher at all. Second line: <b>and it says what is running out</b>. This is the one reading that exists nowhere else in the product.</span></div>
+    <div><span class="tt">23.9 – 26.5</span><span class="nm">The desktop returns</span><span class="ds">Exactly the ending the film always had, back where it always was — before act two was cut, this beat sat at 26.1. The wash lifts on one last low note, and only then does the card close back toward the tray — the desktop returns with the product still in it until the last half second, because the scene does not end on an empty desk. The mark does <b>not</b> fly to the menu bar.</span></div>
+  </div>
+
+  <div class="annot">
+    <section>
+      <h3>The mark does not fly to the tray</h3>
+      <p>
+        It used to. The flight landed at a fixed point in a 1280 × 800 canvas that is stretched
+        across whatever screen is actually there — so it arrived <em>near</em> the menu bar and
+        never on the icon. A mark that lands beside its own slot is worse than one that never
+        points at it, because the gap is the thing you notice. The walk to the corner went with
+        it: both were act two's furniture, parking the mark so it could preside over four demo
+        scenes. <b>Act two is back and the flight is still not.</b> The bug was never about
+        having somewhere to fly to — it was that a canvas coordinate is not a screen coordinate,
+        and letterboxing makes the error different on every display. What replaces it is a
+        sentence that is true wherever the tray happens to be.
+      </p>
+    </section>
+    <section>
+      <h3>The tray does not exist yet, and the line still holds</h3>
+      <p>
+        <code>startTray()</code> runs <em>after</em> the intro in <code>index.ts</code>, so while
+        these two beats play there is no icon in the menu bar at all. The pointer would be pressing
+        an empty strip.
+      </p>
+      <p>
+        <b>And the reorder is not a one-line move</b>, which is the part worth knowing before
+        someone promises it in a stand-up: <code>TrayController</code> is constructed with
+        <code>lifecycle</code>, and <code>lifecycle = getPlatformLifecycle(HEALTH_PORT)</code> runs
+        on the line <em>after</em> <code>await playIntro()</code>. Putting the tray up first means
+        moving the lifecycle construction ahead of the film too — which means the launchd/CLI layer
+        is live during it. That may well be fine; it is not free, and it is a decision rather than
+        a tidy-up. The alternative is cheaper and worse: write the line in the future tense and let
+        the pointer press nothing.
+      </p>
+    </section>
+    <section>
+      <h3>The sound was measured, not guessed</h3>
+      <p>
+        A spectrogram of Dia's audio shows four things: a low band alone for the first three
+        seconds, one broadband noise swell from 3.3 to 7.5 peaking at 6.3, a single transient
+        spike at 8.0, and then <em>nothing</em> but typing clicks. No music bed. This score has
+        the same shape.
+      </p>
+    </section>
+    <section>
+      <h3>Nothing here is filmed</h3>
+      <p>
+        A generated sunrise came back photoreal and fought the brand. Dia's field is not a
+        landscape either — it is a soft abstract light with no detail in it. Rendered in canvas it
+        is a few kilobytes, resolution-independent, and it can be driven off the same clock as the
+        score.
+      </p>
+    </section>
+    <section>
+      <h3>The scrim, not a blend</h3>
+      <p>
+        Compositing the light with <code>screen</code> would make every dark area transparent —
+        the desktop would show through anything we drew. Dia dims rather than blends: the wallpaper
+        stays behind, the light is painted over it.
+      </p>
+    </section>
+    <section>
+      <h3>The sequence is movable, and moving it changes what it says</h3>
+      <p>Each beat is a <b>segment with its own clock</b>: everything inside it is written against
+      <code>AT.&lt;key&gt;</code>, and the absolute starts are summed from one array after the film
+      hands over. Reordering the sequence is reordering that array — the durations, the score's
+      typing cues, the pointer's waypoints and the wash all follow, because none of them holds a
+      number of its own. It replaced a chain of offsets (<code>B2 = B1 + 5.2</code>) where the score,
+      the wash and the statements each kept their own copy of the same moment.</p>
+      <p><b>Reordering is not free of meaning, and not every order is available.</b> These two beats
+      only work in this order: the card has to be there before the register inside it can be the
+      subject.</p>
+    </section>
+    <section>
+      <h3>The character sits this one out</h3>
+      <p>
+        He is the dock icon and the marketing; he is not in the first twelve seconds. The intro is
+        about the machine waking up, and the mark carries it. Video generation refused him anyway.
+      </p>
+    </section>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d')
+  var gate = document.getElementById('gate'), playBtn = document.getElementById('play')
+  var skipBtn = document.getElementById('skip'), muteBtn = document.getElementById('mute')
+  var replayBtn = document.getElementById('replay'), range = document.getElementById('range')
+  var tlabel = document.getElementById('tlabel')
+  var scrimEl = document.getElementById('scrim')
+  var bleedEl = document.getElementById('bleed')
+  var W = 1280, H = 800
+
+  /* ── where the film ends and the tour begins ─────────────────────────────
+     The film is untouched from 0 to OUT: same scrim, same credit, same dawn,
+     same mark drawn by the travelling light, same bell on the third branch,
+     same lockup holding its full beat. Not one of those numbers moves.
+
+     What moves is the ENDING, and it has moved before. Act two was cut in
+     d7fd91e5 and the desktop's return came forward with it — `CUE.lift` was
+     26.1 and became 13.8. The film was never shortened at the front; it was
+     closed early at the back. This puts the close back where it was, with two
+     beats in the space instead of the four that were tried and rejected.
+
+     Every seam below is expressed against OUT / END rather than typed, which
+     is the film's own rule: the last time these moved by a second, the score
+     stayed where it was and picture and sound drifted apart. */
+  var OUT = 13.6            // the lockup has held its beat; the film's own ending began here
+  var LEAD = 1.9            // the card opens out of the mark before anything is said
+
+  /* ── the sequence, as movable parts ───────────────────────────────────────
+     The beats used to be a chain of absolute offsets — `B2 = B1 + 5.2` — which
+     meant reordering them was retiming everything by hand, and the score, the
+     pointer and the statements each held their own copy of the same moment. That
+     is how a row once froze mid-flight in 09: three copies of one number.
+
+     Now each beat is a SEGMENT with its own clock. Everything inside it is
+     written against `AT.<key>` rather than against the film's, and the absolute
+     starts are summed from the array below. To reorder the sequence, reorder the
+     array — the durations, the cues, the wash and the waypoints all follow,
+     because none of them holds a number of its own. To retime one beat, change
+     its `len` and nothing else moves inside it. */
+  var SEQ = [
+    { key: 'menubar', len: 4.2 },   // the card is there, whole
+    { key: 'limits',  len: 4.2 }    // the register is the subject
+  ]
+  var AT = {}
+  var END = (function () {
+    var t = OUT + LEAD
+    for (var i = 0; i < SEQ.length; i++) { AT[SEQ[i].key] = t; t += SEQ[i].len }
+    return t
+  })()
+  var DUR = END + 2.6       // the ending takes the 2.6s it always took
+
+  /* ── pace ──────────────────────────────────────────────────────────────────
+     Everything is authored in "scene seconds" and played faster than that. The
+     numbers in this file — every segment length, every offset, every cue — stay
+     exactly as they were written and reviewed; only the clock that reads them
+     runs quick.
+
+     One place, so the picture and the score cannot disagree: `authored()` maps
+     real time to scene time, `real()` is its inverse and the score is scheduled
+     through it. Retiming by editing offsets would have meant touching a hundred
+     numbers and desynchronising the sound from the picture at the first mistake.
+     In 07 the FILM is not touched: it is the approved
+     piece and it plays at 1.0 up to OUT. Only what follows it is quickened. */
+  /* ── why this number, twice corrected ─────────────────────────────────────
+     First pass: too slow. Second pass at 1.40/1.45: too fast to follow, and the
+     report was that the CONTENT could not be tracked. Both were true, because
+     they were about different things — what dragged was the dead time between
+     beats, not the reading, and quickening the clock shortened the reading with
+     it.
+
+     So the two are separated now. The pace is gentle again and the SLACK is gone
+     instead: every segment is trimmed to what its content actually needs plus a
+     breath, which is where the drag lived. A statement also holds longer, since a
+     line of type is the one thing here a person is meant to read rather than
+     watch. */
+  var RATE = 1.12
+  /* piecewise: the film at 1.0, the tour quick */
+  function authored(tr) { return tr <= OUT ? tr : OUT + (tr - OUT) * RATE }
+  function real(ta) { return ta <= OUT ? ta : OUT + (ta - OUT) / RATE }
+  var DUR_REAL = real(DUR)
+  /* ── each beat is separately playable, and the order is not owned here ─────
+     `state(t)` is a pure function of t: nothing accumulates, nothing is caught up.
+     That is what makes a single beat playable on its own — start the clock inside
+     its window and the picture is already correct, with no fast-forward and no
+     replay of what came before.
+
+     So the sheet exposes its own beat list and accepts `?beat=<key>`, and the
+     runner decides what plays and in what order. A scene that owned its order
+     could not be reordered without editing it; this one can be reordered by
+     whoever is playing it. */
+  /* the film is a beat: it owns everything up to where its own ending began */
+  var LEAD_BEATS = [{ key: 'film', toReal: real(OUT) }]
+  /* ── the beat list ────────────────────────────────────────────────────────
+     The windows TILE: each beat ends where the next begins, so a sequence of them
+     is the scene itself with nothing lost and nothing shown twice.
+
+     The first version gave every beat a 0.45s lead-in and a 0.55s settle, which is
+     right for a beat played alone and wrong for a sequence — measured, it left a
+     1.04s HOLE between the film's end and the next beat's lead-in, so the runner
+     cut the film at 13.85, dropped the moment the card opens out of the mark, and
+     reloaded the page. The lead-in belongs to solo playback and is applied there
+     (`?beat=`), not to the list. */
+  window.JERICO_SCENE = (function () {
+    var bs = [], prev = 0
+    LEAD_BEATS.forEach(function (lb) {
+      bs.push({ key: lb.key, fromReal: prev, toReal: lb.toReal })
+      prev = lb.toReal
+    })
+    SEQ.forEach(function (s) {
+      var end = real(AT[s.key] + s.len)
+      bs.push({ key: s.key, fromReal: prev, toReal: end })
+      prev = end
+    })
+    bs[bs.length - 1].toReal = DUR_REAL          // the closing wash rides the last beat
+    bs.forEach(function (b) { b.len = +(b.toReal - b.fromReal).toFixed(2) })
+    return { file: location.pathname.split('/').pop(), rate: RATE, durReal: DUR_REAL, beats: bs }
+  })()
+
+  var ONE = (function () {
+    var m = /[?&]beat=([a-z0-9_-]+)/i.exec(location.search)
+    if (!m) return null
+    for (var i = 0; i < window.JERICO_SCENE.beats.length; i++) {
+      if (window.JERICO_SCENE.beats[i].key === m[1]) return window.JERICO_SCENE.beats[i]
+    }
+    return null
+  })()
+  /* `?from=&to=` plays a SPAN of real seconds. It exists because beat windows
+     overlap by design — each one starts 0.45 before its segment and ends 0.55
+     after, which a beat needs when it plays alone and which plays the same second
+     twice when beats play back to back. A runner asking for consecutive beats asks
+     for one span instead. */
+  var SPAN = (function () {
+    var a = /[?&]from=([\d.]+)/.exec(location.search)
+    var b = /[?&]to=([\d.]+)/.exec(location.search)
+    if (!a && !b) return null
+    return { from: a ? parseFloat(a[1]) : 0, to: b ? parseFloat(b[1]) : DUR_REAL }
+  })()
+  /* a beat played alone gets a short run-up; a beat played in sequence must not */
+  var PLAY_FROM = SPAN ? Math.max(SPAN.from, 0) : (ONE ? Math.max(ONE.fromReal - 0.45, 0) : 0)
+  var PLAY_TO = Math.min(SPAN ? SPAN.to : (ONE ? ONE.toReal : DUR_REAL), DUR_REAL)
+
+
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  /* present mode: the same stage, unbounded. `?present` or `#present`. */
+  if (/[?&#]present/.test(location.search + location.hash)) {
+    document.body.classList.add('present')
+  }
+  if (/[?&]app=1/.test(location.search)) document.body.classList.add('app')
+
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v }
+  function seg(t, a, b) { return clamp((t - a) / (b - a), 0, 1) }
+  function outCubic(p) { return 1 - Math.pow(1 - p, 3) }
+  function inOutCubic(p) { return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2 }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     The rising light, as a shader rather than two radial gradients.
+
+     Ported from the record-atmosphere in voicenote-sugar-html and recoloured.
+     A CSS/2D gradient reads as a gradient — smooth, even, obviously synthetic,
+     and it bands. This is fractal Brownian noise with a horizon ribbon that
+     undulates and per-pixel dither, so the field has structure instead of
+     falloff. Palette stays strictly on ours: the dawn is built from --hold
+     and --ink and nothing else.
+     ══════════════════════════════════════════════════════════════════════ */
+  var lightCv = document.getElementById('light')
+  var LGL = (function () {
+    var gl = lightCv.getContext('webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: false })
+    if (!gl) return null
+    var vs = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }'
+    var fs = [
+      'precision highp float;',
+      'uniform vec2 u_res; uniform float u_time; uniform float u_rise;',
+      'uniform float u_gather; uniform float u_fade;',
+      'float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }',
+      'float noise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);',
+      '  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }',
+      'float fbm(vec2 p){ float v=0.,a=.52; mat2 t=mat2(.82,-.57,.57,.82);',
+      '  for(int i=0;i<5;i++){ v+=a*noise(p); p=t*p*2.03+13.7; a*=.5; } return v; }',
+      'void main(){',
+      '  vec2 uv = gl_FragCoord.xy / u_res.xy;',
+      '  float t = u_time, aspect = u_res.x/u_res.y;',
+      '  float rise = u_rise;',
+      '  float cloud = fbm(vec2(uv.x*2.15 + t*.026, uv.y*1.52 - t*.038));',
+      '  float fine  = fbm(vec2(uv.x*4.8  - t*.018, uv.y*3.2  + t*.022));',
+      '  float pulse = .92 + .05*sin(t*.62) + rise*.16;',
+      /* the light gathers to the centre as it is about to become the mark */
+      '  float cw = mix(.66, 2.9, u_gather);',
+      '  float center = exp(-pow((uv.x-.5)*aspect*cw, 2.)*2.2);',
+      /* how far up the field has climbed */
+      '  float lift = exp(-uv.y * ((7.2 - rise*4.7) + cloud*.72 + u_gather*7.0));',
+      '  float field = lift*center*pulse;',
+      '  field *= .72 + cloud*.46 + fine*.12;',
+      /* the horizon ribbon — a thin undulating edge, the thing a gradient cannot do */
+      '  float horizon = .045 + rise*.235',
+      '    + .026*sin(uv.x*7.5 + t*(.30 + rise*.26))',
+      '    + (cloud-.5)*(.06 + rise*.03);',
+      '  float ribbon = exp(-abs(uv.y-horizon)*(36.-rise*9.))*center;',
+      /* --hold #ffb547 and --ink #f2f0ec, banded by power so they occupy',
+         different intensities instead of blending linearly */
+      '  vec3 ink   = vec3(.004,.004,.006);',
+      '  vec3 ember = vec3(.150,.052,.020);',
+      '  vec3 amber = vec3(.720,.330,.070);',
+      '  vec3 gold  = vec3(1.000,.710,.278);',
+      '  vec3 paper = vec3(.949,.941,.925);',
+      '  vec3 c = ink;',
+      '  c += ember * field * (1.18 + rise*.22);',
+      '  c += amber * pow(field,1.65) * (.62 + rise*.30);',
+      '  c += gold  * pow(field,3.15) * (.34 + rise*.46);',
+      '  c += paper * ribbon * (.05 + fine*.045 + rise*.16);',
+      '  float edge = smoothstep(.80,.24,abs(uv.x-.5));',
+      '  float top  = 1.-smoothstep(.50,.99,uv.y);',
+      '  c *= mix(.72,1.,edge); c *= mix(.64,1.,top);',
+      '  c += (hash(gl_FragCoord.xy + t)-.5)/255.;',        /* dither kills the banding */
+      '  float a = clamp(max(max(c.r,c.g),c.b)*1.35, 0., 1.) * u_fade;',
+      '  gl_FragColor = vec4(c*a, a);',                      /* premultiplied, so it lays over the scrim */
+      '}'
+    ].join('\n')
+    function sh(type, src) {
+      var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s)
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(s)); return null }
+      return s
+    }
+    var v = sh(gl.VERTEX_SHADER, vs), f = sh(gl.FRAGMENT_SHADER, fs)
+    if (!v || !f) return null
+    var pr = gl.createProgram(); gl.attachShader(pr, v); gl.attachShader(pr, f); gl.linkProgram(pr)
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(pr)); return null }
+    gl.useProgram(pr)
+    var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW)
+    var pos = gl.getAttribLocation(pr, 'p')
+    gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    return {
+      gl: gl,
+      u: {
+        res: gl.getUniformLocation(pr, 'u_res'),
+        time: gl.getUniformLocation(pr, 'u_time'),
+        rise: gl.getUniformLocation(pr, 'u_rise'),
+        gather: gl.getUniformLocation(pr, 'u_gather'),
+        fade: gl.getUniformLocation(pr, 'u_fade')
+      }
+    }
+  })()
+
+  function paintLight(t, riseV, gatherV, fadeV) {
+    if (!LGL) return
+    var g = LGL.gl
+    var dpr = Math.min(window.devicePixelRatio || 1, 2)
+    var w = Math.round(lightCv.clientWidth * dpr), h = Math.round(lightCv.clientHeight * dpr)
+    if (!w || !h) return
+    if (lightCv.width !== w || lightCv.height !== h) { lightCv.width = w; lightCv.height = h; g.viewport(0, 0, w, h) }
+    g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT)
+    if (fadeV <= 0.002) return
+    g.uniform2f(LGL.u.res, w, h)
+    g.uniform1f(LGL.u.time, t)
+    g.uniform1f(LGL.u.rise, riseV)
+    g.uniform1f(LGL.u.gather, gatherV)
+    g.uniform1f(LGL.u.fade, fadeV)
+    g.drawArrays(g.TRIANGLES, 0, 6)
+  }
+  /* the mark: one node fanning out to three, drawn at any size */
+  function mark(g, cx, cy, s, alpha) {
+    g.save()
+    g.translate(cx, cy); g.scale(s, s)
+    g.globalAlpha = alpha
+    g.strokeStyle = '#fffdf8'; g.lineWidth = 1.9; g.lineCap = 'round'
+    g.beginPath(); g.moveTo(-9, 0); g.lineTo(-5, 0); g.stroke()
+    ;[-7, 0, 7].forEach(function (dy) {
+      g.beginPath(); g.moveTo(-5, 0); g.bezierCurveTo(-2, 0, -2, dy, 1, dy); g.stroke()
+    })
+    g.fillStyle = '#fffdf8'
+    g.beginPath(); g.arc(-9, 0, 2, 0, 6.2832); g.fill()
+    ;[-7, 0, 7].forEach(function (dy) { g.beginPath(); g.arc(3, dy, 2, 0, 6.2832); g.fill() })
+    g.restore()
+  }
+
+  function frame(t) {
+    lastDrawn = t
+    ctx.clearRect(0, 0, W, H)
+
+    /* ── the scrim. The desktop is behind the canvas the whole time; this is
+          the only thing standing between you and it. ── */
+    var down = outCubic(seg(t, 0.0, 1.5))
+    var up = inOutCubic(seg(t, END + 0.2, END + 2.0))
+    /* 0.97, then 0.84, were both blackouts. Measured off Dia's own intro: the
+       desktop stays fully legible end to end — wallpaper, widgets, every icon
+       label. It is dimmed by roughly a third and pulled cool, and the film's
+       own light does the rest. Anything past ~.45 stops being a room with the
+       lights down and becomes a curtain.
+
+       Both ends are exactly zero. It used to open at .10 and close at .06,
+       which meant the window's own arrival was a visible step down before any
+       animation had run — the screen darkened, then the film started. It now
+       comes from nothing and returns to nothing, so the only edge on screen is
+       the one being animated. */
+    var scrim = 0.42 * down - 0.42 * up
+    scrimEl.style.opacity = clamp(scrim, 0, 1)
+
+
+    /* ── the credit ── */
+    var cred = seg(t, 1.4, 2.4) * (1 - seg(t, 4.5, 5.3))
+    if (cred > 0.01) {
+      /* a film credit in the marketing site's voice: mono, uppercase, widely
+         tracked, under a rule that draws itself out from the centre. Canvas
+         letterSpacing is not universal, so the tracking is drawn per glyph. */
+      function tracked(txt, cx, cy, size, track, col, a) {
+        ctx.font = '500 ' + size + 'px "IBM Plex Mono", ui-monospace, monospace'
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+        ctx.fillStyle = col; ctx.globalAlpha = a
+        var w = 0, i
+        for (i = 0; i < txt.length; i++) w += ctx.measureText(txt[i]).width + track
+        w -= track
+        var x = cx - w / 2
+        for (i = 0; i < txt.length; i++) {
+          ctx.fillText(txt[i], x, cy)
+          x += ctx.measureText(txt[i]).width + track
+        }
+        ctx.globalAlpha = 1
+      }
+      /* the wash alone no longer guarantees contrast, and a credit that fights
+         someone's wallpaper is unreadable on exactly the machines with the
+         nicest wallpaper. The card carries its own falloff — wide and very
+         soft, so it reads as the light being absent there, not as a plate. */
+      var pad = ctx.createRadialGradient(W / 2, H / 2 - 6, 0, W / 2, H / 2 - 6, 520)
+      pad.addColorStop(0, 'rgba(6,7,11,.80)')
+      pad.addColorStop(0.55, 'rgba(6,7,11,.42)')
+      pad.addColorStop(1, 'rgba(6,7,11,0)')
+      ctx.globalAlpha = cred
+      ctx.fillStyle = pad
+      ctx.fillRect(0, 0, W, H)
+      ctx.globalAlpha = 1
+
+      var rw = 340 * outCubic(seg(t, 1.4, 2.6))
+      ctx.globalAlpha = cred * 0.5
+      ctx.fillStyle = 'rgba(242,240,236,.9)'
+      ctx.fillRect(W / 2 - rw / 2, H / 2 - 44, rw, 1)
+      ctx.globalAlpha = 1
+      tracked('APPNOVA EU OÜ', W / 2, H / 2 - 10, 19, 9.5, '#f2f0ec', cred * 0.94)
+      tracked('PRESENTS', W / 2, H / 2 + 32, 11.5, 14, 'rgba(242,240,236,.50)',
+              cred * seg(t, 2.2, 3.1))
+    }
+
+    /* ── first light: a glow rising from below, drawn additively ── */
+    var rise = outCubic(seg(t, 4.5, 8.2))
+    var gather = inOutCubic(seg(t, 8.1, 8.7))     // the field draws itself in
+    /* The lockup used to start dissolving 0.2 s after the wordmark began to
+       arrive — the two never stood together, which is the whole point of a
+       lockup. It now holds for a full beat before it leaves. */
+    var fade = 1 - seg(t, OUT, OUT + 1.1)
+
+    /* The dawn no longer leaves with the lockup. It drops to a floor and lights
+       the tour from underneath, then goes with the ending. Without it the two
+       beats would play over a flat cool wash — which is the state the film just
+       spent nine seconds climbing out of, and the surface it lights is the one
+       thing the tour has to make legible. */
+    var afterglow = 0.34 * seg(t, OUT + 0.4, OUT + 1.7) * (1 - seg(t, END, END + 1.2))
+    paintLight(t, rise, gather, Math.max(fade * (1 - seg(t, 9.8, 10.8)), afterglow))
+
+    /* the same dawn, spilled onto the desktop. It tracks `rise` so the room
+       warms as the light climbs, holds under the mark, and leaves with the
+       scrim — the wallpaper is lit by the film rather than covered by it. */
+    bleedEl.style.opacity = clamp(rise * Math.max(
+      0.72 * (1 - seg(t, 11.6, OUT + 0.8)),
+      /* This ramp starts BEFORE the film's own falloff has finished, on
+         purpose. Taking the max of a falling curve and a later-rising one
+         leaves a valley where they cross — measured at .05 right as the card
+         opens, so the room went dark for a third of a second at the exact
+         moment there was something new to light. Overlapping them removes it. */
+      0.30 * seg(t, OUT - 0.8, OUT + 1.0) * (1 - seg(t, END, END + 1.4))), 0, 1)
+
+    /* ── the mark is drawn BY the light, not revealed under it.
+          No bloom, no flare, no crossfade — every one of those is the stock
+          logo reveal. The gathered light becomes one moving point: it runs
+          out along the stem, splits into three, and the three branches are
+          the paths it takes. One input becomes three, and the motion is the
+          only thing that says so. ── */
+    var birth = seg(t, 8.6, 10.1)
+    if (birth > 0.001 && fade > 0) {
+      /* The mark is assembled off-screen at full opacity and composited ONCE.
+         It used to be drawn straight onto the stage with `fade` folded into
+         every primitive's own alpha — and the mark is not one shape. The stem
+         meets the branches, the three branches share a start point, and each
+         node sits on the end of its own stroke. At full opacity those overlaps
+         all resolve to the same solid white and you see nothing. Below it,
+         every overlap composites twice: 1-(1-a)² is brighter than a, so the
+         seams lit up and the mark visibly came apart as it left. One buffer,
+         one globalAlpha, no accumulation. */
+      var mc = markBuf.ctx
+      mc.setTransform(1, 0, 0, 1, 0, 0)
+      mc.clearRect(0, 0, W, H)
+      var S = 5.2, MX = W / 2, MY = H * 0.44
+      function L2W(lx, ly) { return { x: MX + lx * S, y: MY + ly * S } }
+      var IN = L2W(-9, 0), STEM = L2W(-5, 0)
+      var ENDS = [L2W(3, -7), L2W(3, 0), L2W(3, 7)]
+      function branchAt(i, u) {
+        var p0 = STEM, p3 = ENDS[i]
+        var p1 = L2W(-2, 0), p2 = L2W(-2, [-7, 0, 7][i])
+        var m = 1 - u
+        return {
+          x: m*m*m*p0.x + 3*m*m*u*p1.x + 3*m*u*u*p2.x + u*u*u*p3.x,
+          y: m*m*m*p0.y + 3*m*m*u*p1.y + 3*m*u*u*p2.y + u*u*u*p3.y
+        }
+      }
+      var run = outCubic(clamp(birth / 0.30, 0, 1))          // point runs the stem
+      var split = clamp((birth - 0.26) / 0.52, 0, 1)          // then the three run out
+      var sp = outCubic(split)
+      var settle = clamp((birth - 0.74) / 0.26, 0, 1)
+
+      mc.save()
+      mc.lineCap = 'round'; mc.lineJoin = 'round'
+
+      /* the stem, as far as the light has travelled */
+      var hx = IN.x + (STEM.x - IN.x) * run
+      mc.strokeStyle = 'rgba(255,251,242,.9)'
+      mc.lineWidth = 1.9 * S / 5.2 * 2.6
+      mc.beginPath(); mc.moveTo(IN.x, IN.y); mc.lineTo(hx, IN.y); mc.stroke()
+
+      /* the three trails, each drawn only as far as its point has run */
+      for (var bi = 0; bi < 3; bi++) {
+        if (sp <= 0) break
+        var lead = clamp((sp * 1.44) - bi * 0.22, 0, 1)
+        if (lead <= 0) continue
+        mc.strokeStyle = 'rgba(255,251,242,.9)'
+        mc.beginPath()
+        for (var u = 0; u <= lead; u += 0.02) {
+          var pt = branchAt(bi, u)
+          if (u === 0) mc.moveTo(pt.x, pt.y); else mc.lineTo(pt.x, pt.y)
+        }
+        mc.stroke()
+        /* the travelling point itself, and the small heat it carries */
+        var head = branchAt(bi, lead)
+        if (lead < 1) {
+          mc.save(); mc.globalCompositeOperation = 'lighter'
+          var gh = mc.createRadialGradient(head.x, head.y, 0, head.x, head.y, 26)
+          gh.addColorStop(0, 'rgba(255,246,222,.85)')
+          gh.addColorStop(1, 'rgba(255,190,110,0)')
+          mc.fillStyle = gh
+          mc.beginPath(); mc.arc(head.x, head.y, 26, 0, 6.2832); mc.fill()
+          mc.restore()
+        }
+        /* it comes to rest as the node */
+        var nr = 2 * S / 5.2 * 2.6 * (lead >= 1 ? (0.6 + 0.4 * settle) : 0.55)
+        mc.fillStyle = 'rgba(255,251,242,.95)'
+        mc.beginPath(); mc.arc(head.x, head.y, nr, 0, 6.2832); mc.fill()
+      }
+
+      /* the input node lands last, once the light has left it behind */
+      var inA = clamp((birth - 0.18) / 0.2, 0, 1)
+      if (inA > 0) {
+        mc.fillStyle = 'rgba(255,251,242,' + (0.95 * inA) + ')'
+        mc.beginPath(); mc.arc(IN.x, IN.y, 2 * S / 5.2 * 2.6, 0, 6.2832); mc.fill()
+      }
+      mc.restore()
+
+      /* the whole assembly, laid down once */
+      ctx.globalAlpha = fade
+      ctx.drawImage(markBuf.el, 0, 0)
+      ctx.globalAlpha = 1
+    }
+
+    var word = seg(t, 10.2, 11.1) * fade
+    if (word > 0.01) {
+      ctx.globalAlpha = word
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#fffdf8'
+      ctx.font = '300 46px Archivo, system-ui, sans-serif'
+      ctx.save(); ctx.translate(W / 2, H * 0.44 + 92); ctx.scale(1.25, 1)
+      ctx.fillText('Jerico', 0, 0); ctx.restore()
+      ctx.globalAlpha = 1
+    }
+
+    /* The mark still does not fly to the menu bar, and that has not changed
+       because act two came back. The flight landed at a hardcoded (1092, 21) in
+       a 1280 × 800 canvas letterboxed across whatever screen is really there:
+       it could not hit the actual tray, and a mark that lands beside its own
+       slot is worse than one that never claims to. What replaces it is a
+       sentence that is true wherever the tray happens to be. */
+
+    /* ── the tour ── */
+    tour(t)
+    disclosure(t)
+    subjectLight(t)
+    lines(t)
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     THE TOUR — two beats, and the surface in them is the product's own.
+
+     The card is a DOM element over the canvas, not something drawn into it.
+     That is the whole point: the popover here is 05-agent-limits.html's own
+     markup, and in the app it is the real `Popover.svelte` mounted in the
+     intro window with a fixture in place of the daemon. A canvas painting of
+     the card would be a fourth drawing of a surface that already exists, and
+     the tour's one claim is that this IS the surface.
+
+     Four approaches to act two were tried and rejected, and three failed the
+     same way: they reached for diagram vocabulary because it is cheap to draw.
+     This is the path the README named as untried — the real surface at real
+     density — narrowed from four beats to two, because only two of the four
+     had anything true to show.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  var cardEl = document.getElementById('card')
+  var cardLayer = document.getElementById('cardlayer')
+
+  /* The card lives in the film's own coordinate system: a 1280 × 800 layer
+     scaled to whatever the stage is, so 368pt here means the same thing 368pt
+     means to the canvas. In the app this scale is 1 and the layer is the
+     screen — the card is simply its real size on a real display. */
+  function fitCardLayer() {
+    var r = cv.getBoundingClientRect()
+    if (!r.width) return
+    var s = r.width / W
+    cardLayer.style.transform = 'scale(' + s + ')'
+
+    /* TRAY is MEASURED, not written down. The glyph's position in the fake menu
+       bar comes out of a flex layout in CSS pixels, so a logical constant would
+       agree with it at exactly one stage width and drift at every other one —
+       which is the same class of mistake as the mark's flight to a hardcoded
+       (1092, 21). The app measures too: `Tray.getBounds().x` for x, the work
+       area for y. Nothing here assumes where the icon is. */
+    var g = trayGlyph.getBoundingClientRect()
+    if (g.width) {
+      TRAY.x = (g.left + g.width / 2 - r.left) / s
+      TRAY.y = (g.top + g.height / 2 - r.top) / s
+    }
+    /* and the card hangs from it: never closer than 24pt to the screen edge,
+       which is what the shipped popover keeps. When that clamp bites — and near
+       the right edge it always does — the CARD stops and the NOTCH keeps
+       tracking the icon. That is not a workaround, it is what the shipped
+       popover does: `onPopoverAnchor({ centerX })` exists precisely so the notch
+       can point at the tray from a card that has run out of room. A notch nine
+       pixels off its icon is the same lie as a mark landing beside its slot. */
+    var left = clamp(TRAY.x - NOTCH.x, 24, W - 368 - 24)
+    cardEl.style.left = left.toFixed(1) + 'px'
+    cardEl.style.top = (TRAY.y + 21).toFixed(1) + 'px'
+    NOTCH.x = clamp(TRAY.x - left, 18, 350)
+    cardEl.querySelector('.notch').style.left = NOTCH.x.toFixed(1) + 'px'
+  }
+
+  /* Where the tray icon is. In the app this is NOT a constant: x comes from
+     `Tray.getBounds().x` and y from the display's work area, which is exactly
+     the split the shipped popover already uses — the tray's bounds are trusted
+     horizontally and not vertically (it returned y:-62 on a 1440×900 display).
+     Hardcoding a canvas coordinate is the bug that killed the mark's flight to
+     the menu bar; this reads the real position instead of assuming one. */
+  var TRAY = { x: 1105, y: 15 }
+  var trayGlyph = document.getElementById('trayglyph')
+  var cursCv = document.getElementById('curs'), cursCtx = cursCv.getContext('2d')
+  var subj = cardEl.querySelector('.subject')
+
+  function lerp(a, b, p) { return a + (b - a) * p }
+
+  /* offsetTop/offsetLeft, not getBoundingClientRect: the card is being scaled
+     every frame, and measuring a transformed box to decide the transform is a
+     feedback loop. Layout offsets ignore transforms. */
+  function subjectOrigin() {
+    return { x: subj.offsetLeft + subj.offsetWidth * 0.30, y: subj.offsetTop + subj.offsetHeight * 0.5 }
+  }
+  var NOTCH = { x: 217, y: 0 }
+
+  function tour(t) {
+    /* A popover opens DOWNWARD from its icon, and this one used to fade in whole
+       over 1.1s — reported as appearing all at once, which a 368 x 631 card over a
+       bright wallpaper will always do if opacity is the only thing moving. It now
+       unrolls from the notch: the clip opens from the top edge, the scale settles
+       behind it, and the fade leads slightly so the first thing visible is already
+       the top of the card rather than a ghost of the whole of it. */
+    var inp = inOutCubic(seg(t, OUT + 0.35, OUT + 1.85))
+    var roll = outCubic(seg(t, OUT + 0.35, OUT + 1.55))
+    /* the card stays to the end: it closes only once the wash has lifted, so
+       the scene does not spend its last second and a half on an empty desk —
+       the cut that follows in the flow lands on a frame that still has the
+       product in it */
+    var out = outCubic(seg(t, END + 1.55, END + 2.45))
+    cardEl.style.opacity = clamp(seg(t, OUT + 0.35, OUT + 0.85) * (1 - out), 0, 1)
+    /* the clip is what makes it unroll; it is released once open so the wash and
+       the push in beat two are not clipped by a stale inset */
+    cardEl.style.clipPath = roll < 0.999 ? 'inset(0 0 ' + ((1 - roll) * 100).toFixed(2) + '% 0)' : 'none'
+
+    /* The tray icon arriving. The mark does not travel here — the big one
+       dissolves in the centre while the small one turns up where it lives, and
+       the half-second they overlap is the cross-dissolve that ties them. Same
+       statement the flight was making, without the coordinate it could never
+       get right. It is up BEFORE the pointer reaches it: you cannot press
+       something that is not there yet.
+
+       And it does NOT leave with the film. Everything else here is borrowed for
+       twenty-eight seconds and given back; the icon is the one thing that stays,
+       and it is the whole payoff — the Finish screen's first sentence is "the
+       mark is in your menu bar now". Fading it out on the last beat would take
+       the one durable thing the film delivered. */
+    trayGlyph.style.opacity = clamp(seg(t, OUT - 0.85, OUT - 0.15), 0, 1)
+
+    /* ── the transitions ──────────────────────────────────────────────────
+       Dia grows a surface out of the point you clicked and pushes gently into
+       what it wants you to read. Both here, and both anchored to something:
+       the entrance scales from the NOTCH — the corner under the tray icon,
+       which is where the popover really comes from — and beat two pushes in
+       0.035 with its origin ON THE REGISTER.
+
+       That second one is the move the record warns about: two attempts at
+       act two's monotony were made with camera movement and both failed for
+       being "the camera doing the composition's job". This is not a drift
+       across the frame; the origin is the subject itself, so the push is the
+       composition closing on what it named. If it reads as a camera in review,
+       it is wrong and the wash alone should carry the beat. */
+    var push = inOutCubic(seg(t, AT.limits - 0.45, AT.limits + 0.65))
+    var closing = outCubic(seg(t, END + 1.45, END + 2.25))
+    var reg = subjectOrigin()
+    /* the origin travels rather than being switched: swapping it while the
+       card is scaled prints a jump. Interpolated, it is continuous, and the
+       card closes back toward the tray it came out of. */
+    var op = push * (1 - closing)
+    cardEl.style.transformOrigin =
+      lerp(NOTCH.x, reg.x, op).toFixed(1) + 'px ' + lerp(NOTCH.y, reg.y, op).toFixed(1) + 'px'
+    var scale = 0.93 + 0.07 * inp + 0.035 * push - 0.09 * closing
+    cardEl.style.transform = 'scale(' + scale.toFixed(4) + ')'
+
+    /* Beat two names one section. The rest is washed to .42 and stays legible —
+       the film's own measured value, and for the same reason: someone who
+       cannot read the rest of the card cannot place the part being pointed at.
+       A spotlight would hide the card to point at the card. */
+    cardEl.className = 'pop' + (t >= AT.limits - 0.45 && t < END + 0.4 ? ' washing' : '')
+
+    cursor(t, reg)
+  }
+
+  /* ── the pointer ────────────────────────────────────────────────────────
+     It does two jobs and neither is decoration. First it answers the question
+     the beat cannot claim on its own: the tray icon is up there and this is
+     what happens when you press it — a demonstration rather than an assertion
+     about the screen the user is looking at. Second it carries beat two's
+     attention without a coach mark, because a pointer is the machine's own
+     vocabulary and this design language has no callouts to borrow.
+
+     It never clicks the register. There is nothing behind that click in a
+     two-beat tour, and a pointer that presses something and gets no result
+     teaches that the card's controls are inert. */
+  function cursor(t, reg) {
+    cursCtx.clearRect(0, 0, W, H)
+
+    /* it picks up from the lockup: at 12.9 the mark is still in the centre of
+       the frame, and the pointer starts from it rather than sliding in from an
+       edge with no reason to have been there. */
+    var LOCK = { x: W / 2 + 26, y: H * 0.44 + 34 }
+    var toTray = inOutCubic(seg(t, OUT - 0.7, OUT + 0.2))
+    var leave1 = seg(t, OUT + 1.7, OUT + 2.2)
+
+    /* One leg, and one only. The pointer used to come back in beat two and drift
+       along the register's three rows, which was the film pointing at its own
+       content — and the wash already names the subject, which is what the wash is
+       for. Inside the product 08 and 09 now use the app's own focus ring instead
+       of an arrow; the arrow survives here because the tray icon is an OS surface
+       with no focus vocabulary of its own, and pressing it is the gesture. */
+    var x = lerp(LOCK.x, TRAY.x, toTray)
+    var y = lerp(LOCK.y, TRAY.y, toTray)
+
+    var a = clamp(seg(t, OUT - 0.75, OUT - 0.45) * (1 - leave1), 0, 1)
+    if (a < 0.01) return
+
+    /* the click. A ring, once, on the press — and the card's own entrance
+       starts 0.05s after it, so the surface answers the gesture instead of
+       arriving alongside it. */
+    var press = seg(t, OUT + 0.30, OUT + 0.64)
+    if (press > 0 && press < 1) {
+      cursCtx.beginPath()
+      cursCtx.arc(TRAY.x, TRAY.y, 4 + 20 * outCubic(press), 0, Math.PI * 2)
+      cursCtx.strokeStyle = 'rgba(242,240,236,' + (0.5 * (1 - press)).toFixed(3) + ')'
+      cursCtx.lineWidth = 1.5
+      cursCtx.stroke()
+    }
+    /* and the pointer itself dips on the press, the way a hand does */
+    var dip = press > 0 && press < 0.45 ? 1 - Math.abs(press / 0.225 - 1) : 0
+
+    cursCtx.save()
+    cursCtx.translate(x, y)
+    cursCtx.scale(1.32 - 0.09 * dip, 1.32 - 0.09 * dip)
+    cursCtx.globalAlpha = a
+    /* the system arrow, drawn: white body, dark edge, and a soft drop so it
+       stays legible over both the washed desktop and the card's own ground */
+    cursCtx.beginPath()
+    cursCtx.moveTo(0, 0)
+    cursCtx.lineTo(0, 17.4)
+    cursCtx.lineTo(4.4, 13.5)
+    cursCtx.lineTo(7.4, 20.3)
+    cursCtx.lineTo(10.1, 19.1)
+    cursCtx.lineTo(7.1, 12.4)
+    cursCtx.lineTo(12.5, 12.1)
+    cursCtx.closePath()
+    cursCtx.shadowColor = 'rgba(0,0,0,.55)'; cursCtx.shadowBlur = 6; cursCtx.shadowOffsetY = 1.5
+    cursCtx.fillStyle = '#fdfcfa'
+    cursCtx.fill()
+    cursCtx.shadowColor = 'transparent'; cursCtx.shadowBlur = 0
+    cursCtx.strokeStyle = 'rgba(12,12,12,.85)'; cursCtx.lineWidth = 1
+    cursCtx.stroke()
+    cursCtx.restore()
+    cursCtx.globalAlpha = 1
+  }
+
+  /* ── the card says its readings are samples ───────────────────────────────
+     This was open and it should not have been: at this point in the flow the
+     daemon is not set up, so `3 panels · connected · up 04:21` and `claude 86%`
+     are not readings the machine could take. 08 had the milder version of the
+     same fault — a drawn menu of four CLIs posing as a detection — and the rule
+     it settled on applies here with more force: a reading nobody took must
+     announce itself, the way the register's own em dash does.
+
+     Placed UNDER the card rather than on it. A tag pinned to the corner would
+     be adjacent too, and it would deface the one thing the tour exists to show
+     truthfully; a line in the title bar would be far from the numbers it
+     qualifies and the easiest to miss. Quiet, mono, and it does not compete with
+     the statement, which is display face at three times the size — the two
+     registers this set already uses everywhere else.
+
+     Its position is read off the card, not written down: the card is placed from
+     the measured tray, so a typed y would be wrong on the first display that
+     disagrees. */
+  function disclosure(t) {
+    var a = parseFloat(cardEl.style.opacity || '0')
+    if (a < 0.05) return
+    var cx = cardEl.offsetLeft + 368 / 2
+    var cy = cardEl.offsetTop + cardEl.offsetHeight + 26
+    ctx.font = '400 13px "IBM Plex Mono", ui-monospace, monospace'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = 'rgba(242,240,236,.62)'
+    ctx.globalAlpha = a * 0.9
+    ctx.fillText('sample readings — this Mac is not connected yet', cx, cy)
+    ctx.globalAlpha = 1
+  }
+
+  /* One line at a time, bottom left, typed. The score already has fourteen
+     clicks under each beat at 62 ms — the reveal is 0.87 s so the sound and
+     the letters are the same event. Both lines are true today: the mark is in
+     the menu bar, and the register is the only place in Jerico that says how
+     much quota is left. */
+
+  /* ── the statement's home, and the light it points with ────────────────────
+     Bottom left, once and for all: the statement is a caption on a picture, not a
+     title over it, and out of the way is the whole point. What replaces the dark
+     plate behind it is a lit SUBJECT — `#lit`, positioned from the element the
+     line is actually about, blended `plus-lighter` exactly as the film's bleed is.
+     Describing something by darkening it was the wrong way round. */
+  var SAY_X = 110, SAY_BASE = H - 62
+  var litEl = document.getElementById('lit')
+
+  /* `lit` may be a selector or a list of them, first that exists winning — a
+     subject can be one thing before an action and another after it (the spec
+     button becomes the terminal that replaced it). Several matches are unioned,
+     which is how a subject can be "the three tool calls" or "the two rules"
+     rather than the whole column they sit in.
+
+     And a size guard, because the first version lit `#term` — 935 x 658, the
+     entire centre column. A glow that large is not pointing at anything, it is a
+     second wash. If the union is bigger than the frame can call a subject, the
+     light stays off rather than lying about what it means. */
+  function litOver(sel, a, onLight) {
+    if (!sel || a < 0.02) { litEl.style.opacity = 0; return }
+    var list = (typeof sel === 'string') ? [sel] : sel
+    var sr = cv.getBoundingClientRect()
+    if (!sr.width) { litEl.style.opacity = 0; return }
+    var box = null
+    for (var i = 0; i < list.length && !box; i++) {
+      var nodes = document.querySelectorAll(list[i])
+      for (var n = 0; n < nodes.length; n++) {
+        var r = nodes[n].getBoundingClientRect()
+        if (!r.width || !r.height) continue
+        box = box
+          ? { l: Math.min(box.l, r.left), t: Math.min(box.t, r.top),
+              r: Math.max(box.r, r.right), b: Math.max(box.b, r.bottom) }
+          : { l: r.left, t: r.top, r: r.right, b: r.bottom }
+      }
+    }
+    if (!box) { litEl.style.opacity = 0; return }
+    var k = sr.width / W
+    var x = (box.l - sr.left) / k, y = (box.t - sr.top) / k
+    var w = (box.r - box.l) / k, h = (box.b - box.t) / k
+    /* A guard that switched OFF was the wrong instrument, twice over. It measured
+       width first and rejected every real subject (terminal lines are blocks, so
+       "the three tool calls" is 815 x 62). Then it measured area and cut out
+       mid-beat as a subject GREW — the written block passes 210k around its
+       twelfth line, so the light died halfway through the thing it was pointing
+       at, which is exactly the "incomplete" this was reported as.
+
+       The size does not decide WHETHER to light, it decides HOW MUCH. A small
+       subject takes a bright glow; a large one takes a soft one, so it stays a
+       light and never becomes a second wash. Only a genuinely frame-sized union
+       is refused. */
+    var area = w * h
+    if (area > 760000) { litEl.style.opacity = 0; return }
+    /* Two dials, not one. The EDGE stays essentially constant — it is what makes
+       the box definite, and dimming it is what made the treatment look cheap on
+       big subjects. The FILL is what has to yield: a small subject can carry a
+       real wash of light, a large one gets almost none, or the box becomes a
+       panel laid over the product instead of a light on it. */
+    var strength = clamp(1 - (area - 60000) / 1400000, 0.68, 1)
+    litEl.style.setProperty('--fill', (clamp(9000 / Math.max(area, 9000), 0.035, 0.16)).toFixed(3))
+    litEl.style.setProperty('--mark', clamp(Math.min(w, h) * 0.30, 6, 15).toFixed(1) + 'px')
+    litEl.style.setProperty('--edge', (0.34 + 0.16 * clamp(60000 / Math.max(area, 60000), 0, 1)).toFixed(3))
+    /* 10, not 44: a box hugs its subject; a wide feather was the glow's job */
+    var pad = 10
+    /* clamped, so the feather is not spent off the top of the frame — the tray
+       glyph sits at y 15 and half its glow was outside the picture */
+    var top = Math.max(y - pad, 2)
+    litEl.style.left = ((x - pad) * k) + 'px'
+    litEl.style.top = (top * k) + 'px'
+    litEl.style.width = ((w + pad * 2) * k) + 'px'
+    litEl.style.height = ((h + pad * 2 - (top - (y - pad))) * k) + 'px'
+    litEl.classList.toggle('on-light', !!onLight)
+    litEl.style.opacity = a * strength
+  }
+
+  /* ── what is lit, moment by moment ────────────────────────────────────────
+     The light used to be tied to the STATEMENT, and that was the mistake: a
+     caption is on screen for about three seconds and the things that matter
+     happen whether or not one is showing. So most of the scene was unlit, and
+     the moments that mattered most — a row landing, a group being born, an
+     envelope arriving — often had no light at all.
+
+     It follows the ACTION now. This table covers the scene end to end, every
+     entry derived from the same constants the pictures are, so a moved segment
+     takes its light with it. The statement is independent again: it says its line
+     bottom-left and points at nothing. */
+  var SUBJECTS = [
+    { at: OUT - 0.55,      until: OUT + 1.30,  sel: ['#trayglyph'], onLight: true },
+    { at: OUT + 1.40,      until: AT.limits,   sel: ['#card .reading, #card .sub'] },
+    { at: AT.limits + 0.10, until: END + 0.4,  sel: ['#card .subject'] }
+  ]
+
+  /* The strongest subject at t wins, and it is chosen BEFORE anything is drawn.
+     The first version took the first entry whose window contained t and returned
+     — so during the overlap where one subject is fading out and the next is
+     fading in, it committed to the outgoing one, kept its box, and the light sat
+     at the old coordinates while the new subject was elsewhere on screen.
+     Measured: the group header at 1038,262 with the light still at 955,407. */
+  function subjectLight(t) {
+    var best = null, bestA = 0
+    for (var i = 0; i < SUBJECTS.length; i++) {
+      var s = SUBJECTS[i]
+      if (t < s.at || t > s.until) continue
+      var a = seg(t, s.at, s.at + 0.30) * (1 - seg(t, s.until - 0.30, s.until))
+      if (a > bestA) { bestA = a; best = s }
+    }
+    if (!best || bestA < 0.02) { litEl.style.opacity = 0; litEl.dataset.subject = ''; return }
+    /* recorded, not for the picture but so anyone — including a test — can ask
+       what the light is claiming to point at without reading the table */
+    litEl.dataset.subject = best.sel[0]
+    litOver(best.sel, bestA * 0.95, best.onLight)
+  }
+
+  /* how long a statement stays after it has finished arriving */
+  var SAY_HOLD = 2.2
+  var LINES = [
+    { at: AT.menubar, s: 'the mark in your menu bar is this Mac', lit: '#trayglyph' },
+    { at: AT.limits,  s: 'and it says what is running out', lit: '#card .subject' }
+  ]
+
+
+  /* ── announce ───────────────────────────────────────────────────────────
+     One statement, once, in order. Not the picture described — the line the
+     picture exists to deliver. Escape and Skip are stated first so the way out
+     is known before the piece begins rather than discovered after it. */
+  var said = -1
+  function announce(i, text) {
+    if (i <= said) return
+    said = i
+    var el = document.getElementById('say')
+    if (el) el.textContent = text
+  }
+
+  function lines(t) {
+    LINES.forEach(function (L, i) {
+      /* ── a statement is punctuation, not a layer ─────────────────────────
+         It used to hold until the NEXT statement arrived, which in a scene with
+         four of them meant it was on screen almost continuously — so a caption
+         became a permanent overlay and the product was reviewed through it. It
+         now arrives, holds while it can be read, and LEAVES. Between statements
+         the screen is entirely the thing being shown, which is the whole point
+         of showing it. */
+      var nxt = (i + 1 < LINES.length) ? LINES[i + 1].at : END + 0.3
+      var done = L.at + 0.87                 // the reveal has finished by here
+      var outAt = Math.min(done + SAY_HOLD, nxt - 0.30)
+      var a = seg(t, L.at, L.at + 0.20) * (1 - seg(t, outAt, outAt + 0.42))
+      if (a < 0.01) return
+      announce(i, L.s)
+      var shown = L.s.slice(0, Math.round(L.s.length * clamp((t - L.at) / 0.87, 0, 1)))
+
+      /* ── the statement ────────────────────────────────────────────────
+         Not a caption strip. Two drafts were wrong in opposite directions: a
+         mono line at 15px, which turned to mush over a UI that is also mono,
+         and then a full-width subtitle band, which was legible and looked like
+         television — a plate lying on top of the picture.
+
+         The film already solved exactly this. Its credit "carries its own
+         falloff — wide and very soft, so it reads as the light being absent
+         there, not as a plate". Same vocabulary, at presentation scale: the
+         statement stands in the upper left with air around it, the light is
+         simply absent behind it, and nothing is boxed.
+
+         Emphasis in this language is a weight drop at expanded width and never
+         a colour change, so the type is 300 at 1.1× — the same trick the
+         wordmark uses with ctx.scale. */
+      /* Bottom left, and it points with LIGHT rather than shade. `#lit` brightens
+         the element the line is about — the film's own bleed technique,
+         `plus-lighter` — instead of a dark falloff dimming a third of the frame
+         to make a caption readable. Describing a thing by darkening it was the
+         wrong way round. */
+      var cx = SAY_X, cy = SAY_BASE
+      /* The matte is measured from the line instead of being a fixed-width strip.
+         A vertical gradient inside a 780px rectangle left a visible right edge on
+         longer statements. Scaling a radial falloff makes the absence of light
+         local to the glyphs in both axes, with no edge to cut. */
+      ctx.save()
+      ctx.font = '300 38px Archivo, system-ui, -apple-system, sans-serif'
+      var fullW = ctx.measureText(L.s).width * 1.1
+      var matteW = clamp(fullW + 180, 420, 1030)
+      var matteR = 72
+      ctx.translate(cx + fullW * 0.5, cy - 9)
+      ctx.scale((matteW * 0.5) / matteR, 1)
+      var pad = ctx.createRadialGradient(0, 0, 0, 0, 0, matteR)
+      pad.addColorStop(0, 'rgba(6,7,11,.44)')
+      pad.addColorStop(0.54, 'rgba(6,7,11,.27)')
+      pad.addColorStop(1, 'rgba(6,7,11,0)')
+      ctx.globalAlpha = a
+      ctx.fillStyle = pad
+      ctx.fillRect(-matteR, -matteR, matteR * 2, matteR * 2)
+      ctx.restore()
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(1.1, 1)
+      ctx.font = '300 38px Archivo, system-ui, -apple-system, sans-serif'
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+      ctx.fillStyle = '#fffdf8'
+      ctx.globalAlpha = a * 0.97
+      ctx.shadowColor = 'rgba(4,6,10,.54)'
+      ctx.shadowBlur = 11
+      ctx.shadowOffsetY = 2
+      ctx.fillText(shown, 0, 0)
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+      if (shown.length < L.s.length) ctx.fillRect(ctx.measureText(shown).width + 7, -12, 10, 2)
+      ctx.restore()
+      ctx.globalAlpha = 1
+    })
+  }
+  var lastDrawn = 0
+
+  /* an off-screen twin of the stage, only ever used to assemble the mark */
+  var markBuf = (function () {
+    var el = document.createElement('canvas')
+    el.width = W; el.height = H
+    return { el: el, ctx: el.getContext('2d') }
+  })()
+
+  /* The film's own machinery ends here. Everything from `tour()` and `lines()`
+     upward is 04-first-launch-intro.html unchanged; keep it that way, and make
+     film-level edits there rather than in this copy. */
+
+  /* ── the score, shaped from Dia's spectrogram: a low band alone, one
+        broadband swell, a struck bell, then silence ── */
+  var actx = null, master = null, muted = false, live = []
+  function stopAudio() { live.forEach(function (n) { try { n.stop() } catch (e) {} }); live = [] }
+  function tone(t0, f, dur, peak, type) {
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var o = actx.createOscillator(), g = actx.createGain()
+    o.type = type || 'sine'; o.frequency.value = f
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.05); live.push(o)
+  }
+  function noise(t0, dur, peak, f0, f1, q, peakAt) {
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var len = Math.ceil(actx.sampleRate * dur)
+    var buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0)
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1
+    var src = actx.createBufferSource(); src.buffer = buf
+    var bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q || 0.7
+    bp.frequency.setValueAtTime(f0, t0)
+    bp.frequency.exponentialRampToValueAtTime(f1, t0 + dur)
+    var g = actx.createGain()
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.linearRampToValueAtTime(peak, t0 + dur * (peakAt || 0.78))
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t0); src.stop(t0 + dur); live.push(src)
+  }
+
+  /* Every cue below is derived from a visual constant rather than typed as a
+     literal, because the last time act two moved by a second the score stayed
+     where it was and the two drifted apart. If a beat moves, its sound moves. */
+  var CUE = {
+    swell:  { at: 4.5, len: 4.2, crest: (8.2 - 4.5) / 4.2 },   // crest exactly at rise = 1
+    /* the mark is not one event. Three branches arrive in sequence, and the
+       score has to say so or the picture and the sound disagree. */
+    nodes:  [9.53, 9.65, 9.77],
+    /* the card arriving gets a low push, not a hit. It is a surface opening,
+       and the bell has already been spent on the mark — a second strike would
+       make the product compete with the thing it came out of. */
+    card:   OUT + 0.45,
+    /* typing under each line, which is the only sound in Dia's second act too.
+       Derived from the line times, not typed: LINES and CUE.beats are the same
+       two numbers, so a beat cannot move without its sound moving. */
+    /* derived from the sequence, so a reordered beat takes its typing with it */
+    beats:  SEQ.map(function (x) { return AT[x.key] }),
+    lift:   END + 0.2
+  }
+
+  /* A struck bell, not a chord. Three things separate the two: the partials
+     are inharmonic (the 1.183 tierce is the one that reads as "bell"), the
+     upper ones start microseconds late and die far faster, and the whole
+     thing bends very slightly down from its onset the way struck metal does.
+     Decay uses setTargetAtTime so the tail is a real exponential rather than
+     a ramp to a floor. */
+  function bell(t0, f, amp, decay) {
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var dk = decay === undefined ? 1 : decay
+    var P = [
+      [0.500, 1.00, 3.6],   // hum
+      [1.000, 0.92, 2.7],   // prime
+      [1.183, 0.58, 1.75],  // tierce — the minor third
+      [1.506, 0.44, 1.30],  // quint
+      [2.000, 0.35, 0.90],  // nominal
+      [2.550, 0.17, 0.52],
+      [3.010, 0.11, 0.36],
+      [4.170, 0.07, 0.23]
+    ]
+    P.forEach(function (p, i) {
+      var o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'sine'
+      var det = 1 + (i % 2 ? 1 : -1) * 0.0016 * i        // partials beat against each other
+      var hz = f * p[0] * det
+      o.frequency.setValueAtTime(hz * 1.007, t0)          // struck sharp
+      o.frequency.exponentialRampToValueAtTime(hz, t0 + 0.10)   // and it settles
+      var st = t0 + i * 0.0024                            // upper partials a hair late
+      var pk = amp * p[1]
+      g.gain.setValueAtTime(0.0001, st)
+      g.gain.exponentialRampToValueAtTime(pk, st + 0.004)
+      g.gain.setTargetAtTime(0.00001, st + 0.006, (p[2] * dk) / 4.4)
+      o.connect(g); g.connect(master); o.start(st); o.stop(st + p[2] * dk + 0.25)
+      live.push(o)
+    })
+    noise(t0 - 0.004, 0.04 + 0.02 * dk, amp * 0.55, 7400, 2200, 0.9, 0.10)   // the strike
+  }
+
+  /* ── the flow is continuous even though the documents are not ──────────────
+     Three scenes are three DOCUMENTS with three AudioContexts, and the runner used
+     to end one and begin the next: the room tone died with the outgoing page and
+     the incoming page's bed climbed from nothing, so every seam had a hole in it
+     — reported as the background sound breaking at the transitions.
+
+     The runner keeps the outgoing scene alive for a moment after the next one has
+     mounted (it is covered by then, so this is audible only), and calls this. The
+     old room fades UNDER the new one instead of stopping before it. */
+  window.__fadeOut = function (sec) {
+    if (!actx || !master) return
+    var now = actx.currentTime, d = sec || 0.6
+    try {
+      master.gain.cancelScheduledValues(now)
+      master.gain.setValueAtTime(master.gain.value, now)
+      master.gain.linearRampToValueAtTime(0.0001, now + d)
+    } catch (e) { /* a context already closed has nothing to fade */ }
+  }
+  /* Readable because it has to be checkable: the score is the one part of these
+     sheets nobody can look at, so the crossfade's actual level is exposed rather
+     than asserted. */
+  window.__level = function () { return master ? master.gain.value : null }
+  /* Runner flags. `handover` means a scene follows this one, so anything that
+     would fade out at the end holds instead and lets the crossfade do it;
+     `joined` means one preceded it, so nothing needs to be established from
+     silence — the room is already playing. Absent for a sheet opened on its own,
+     which is why a standalone read is unchanged. */
+  var HANDOVER = /[?&]handover=1/.test(location.search)
+  /* every scheduled cue, for review and for the tests — the score is the one part
+     of these sheets you cannot see */
+  window.__cues = []
+  /* Clamped to now. `t0` is span-shifted, so a scene started mid-file schedules the
+     beginning of its own score in the past — and a negative time does not merely
+     get ignored, it THROWS: measured, `setValueAtTime ... -16.927` took the whole
+     bed with it and the scene played silent. For an envelope, "already arrived" is
+     the correct reading of a moment that has passed. */
+  function at(x) { return Math.max(x, actx.currentTime + 0.001) }
+  function schedule() {
+    /* Shifted by the span's own start, because the picture starts at PLAY_FROM and
+       the score used to start at zero regardless — so any beat played on its own,
+       or any run the flow starts mid-file, heard the wrong second of the score. */
+    var t0 = actx.currentTime + 0.05 - real(PLAY_FROM)
+    /* the low band alone, nothing above ~1.7 kHz — exactly Dia's opening */
+    var lp = actx.createBiquadFilter(); lp.type = 'lowpass'
+    lp.frequency.setValueAtTime(150, at(t0))
+    lp.frequency.linearRampToValueAtTime(900, at(t0 + real(CUE.swell.at + CUE.swell.len)))
+    lp.frequency.linearRampToValueAtTime(160, at(t0 + real(CUE.lift + 0.6)))
+    lp.connect(master)
+    ;[[49, 'sine', 0.11], [73.42, 'triangle', 0.05], [98, 'sine', 0.055]].forEach(function (d) {
+      var o = actx.createOscillator(), g = actx.createGain()
+      o.type = d[1]; o.frequency.value = d[0]
+      g.gain.setValueAtTime(0.0001, at(t0))
+      /* a second and a half to establish, because this IS the beginning — the only
+         sustained sound in the sequence, and the only place one belongs: it comes up
+         under the film, carries the daemon's arrival, and fades at the film's end.
+         Nothing after it starts one again. */
+      g.gain.linearRampToValueAtTime(d[2], at(t0 + 1.5))
+      g.gain.setValueAtTime(d[2], at(t0 + real(CUE.nodes[2] + 0.4)))
+      g.gain.linearRampToValueAtTime(0.0001, at(t0 + real(CUE.lift + 0.2)))
+      o.connect(g); g.connect(lp)
+      /* clamped, because `t0` is span-shifted: an oscillator told to start in the
+         past starts immediately, and one told to stop in the past never sounds */
+      var oEnd = t0 + real(CUE.lift + 0.6)
+      if (oEnd <= actx.currentTime) return
+      o.start(Math.max(t0, actx.currentTime)); o.stop(oEnd); live.push(o)
+    })
+
+    /* one broadband swell, rising with the light and ending as it gathers */
+    noise(t0 + real(CUE.swell.at), CUE.swell.len, 0.085, 220, 5200, 0.5, CUE.swell.crest)
+
+    /* the first two landings are small strikes on the same bell, the third
+       is the arrival and rings at full weight */
+    bell(t0 + real(CUE.nodes[0]), 880.00, 0.028, 0.20)
+    bell(t0 + real(CUE.nodes[1]), 1174.70, 0.024, 0.16)
+    bell(t0 + real(CUE.nodes[2]), 587.33, 0.072, 1.00)
+
+    /* the card opening: a low, soft push, not a strike. The bell has already
+       been spent on the mark, and the card comes OUT of the mark — a second
+       hit would make the product an event competing with its own origin. */
+    noise(t0 + real(CUE.card - 0.25), 0.9, 0.030, 140, 620, 0.7)
+
+    /* then silence, broken only by typing under each line. Dia's own second act
+       has nothing else here at all — no bed, no pad, no swell per beat. Fourteen
+       clicks at 62 ms is 0.87 s, which is exactly the reveal in `lines()`, so
+       the sound and the letters are one event rather than two that agree. */
+    CUE.beats.forEach(function (bt) {
+      for (var c = 0; c < 14; c++) {
+        tone(t0 + real(bt + 0.05 + c * 0.062 + Math.sin(c * 3.1) * 0.010),
+             1350 + (c % 4) * 130, 0.026, 0.013, 'square')
+      }
+    })
+
+    /* the last light, as the desktop comes back */
+    tone(t0 + real(CUE.lift), 196, 2.2, 0.05)
+    tone(t0 + real(CUE.lift), 98, 2.6, 0.055, 'triangle')
+  }
+
+
+  /* ── the drawn app is a picture, not an interface ────────────────────────
+     Its controls are real <button> elements because that is how you draw a
+     button honestly, and that put every one of them in the tab order AHEAD of
+     the way out: measured, the first Tab landed on the specimen's "Spawn
+     worker" instead of on Skip. A picture must not be operable. Run once at
+     init and again after anything is inserted, since the menus arrive by
+     innerHTML. */
+  function deaden() {
+    var n = document.querySelectorAll('.stage button')
+    for (var i = 0; i < n.length; i++) {
+      if (n[i].closest('.hud') || n[i].closest('.gate')) continue
+      n[i].tabIndex = -1
+    }
+  }
+
+  var raf = null, startedAt = 0, playing = false
+  function setLabel(tr) { tlabel.textContent = tr.toFixed(2) + ' / ' + DUR_REAL.toFixed(1) + 's' }
+  /* ── reaching the end of a span does not silence it ────────────────────────
+     `stop()` killed every oscillator the moment the picture reached PLAY_TO, which
+     is why extending the bed's envelope changed nothing: the envelope was still
+     scheduled and the nodes were already stopped. With a scene to follow, the audio
+     is LEFT RUNNING and the runner's crossfade takes it down over 0.8s before the
+     document — and with it the AudioContext — is removed. Every other caller
+     (Skip, the scrubber, Replay) still silences immediately, which is what those
+     mean. */
+  function stop(keepAudio) { playing = false; if (raf) cancelAnimationFrame(raf); raf = null
+    if (!keepAudio) stopAudio() }
+  function loop() {
+    var tr = PLAY_FROM + (performance.now() - startedAt) / 1000
+    if (tr >= PLAY_TO) { tr = PLAY_TO; stop(HANDOVER) }
+    frame(authored(tr)); setLabel(tr); range.value = Math.round(tr * 100)
+    if (playing) raf = requestAnimationFrame(loop)
+  }
+  function start() {
+    stop(); gate.hidden = true
+    if (!actx) {
+      var AC = window.AudioContext || window.webkitAudioContext
+      actx = new AC()
+      /* eight partials starting in phase sum to the sum of their amplitudes,
+         which measured at 1.75 — well past the 1.0 that clips. This is the
+         difference between a struck bell and a broken one. */
+      var lim = actx.createDynamicsCompressor()
+      lim.threshold.value = -6; lim.knee.value = 0; lim.ratio.value = 20
+      lim.attack.value = 0.002; lim.release.value = 0.22
+      lim.connect(actx.destination)
+      master = actx.createGain()
+      master.gain.value = muted ? 0 : 0.72; master.connect(lim)
+    }
+    if (actx.state === 'suspended') actx.resume()
+    schedule(); startedAt = performance.now(); playing = true; loop()
+  }
+
+  playBtn.addEventListener('click', start)
+  replayBtn.addEventListener('click', start)
+  skipBtn.addEventListener('click', function () { stop(); frame(authored(PLAY_TO)); setLabel(PLAY_TO); range.value = Math.round(PLAY_TO * 100) })
+  muteBtn.addEventListener('click', function () {
+    muted = !muted
+    if (master) master.gain.value = muted ? 0 : 0.95
+    muteBtn.textContent = muted ? '♪ sound off' : '♪ sound on'
+  })
+  range.addEventListener('input', function () { stop(); var tr = range.value / 100; frame(authored(tr)); setLabel(tr) })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && playing) skipBtn.click() })
+
+  /* The scrubber's range is derived from DUR rather than written into the
+     markup. It was hardcoded to the old 16.2 and would have silently refused
+     to scrub into the part of the film this sheet exists to show. */
+  range.max = Math.round(DUR_REAL * 100)
+
+  /* The tray icon, at tray size. Same geometry as Mark.svelte, the intro's own
+     mark and the template PNG in the menu bar — one input node fanning out to
+     three, in currentColor so it takes the ink of the bar it sits in. */
+  trayGlyph.innerHTML =
+    '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">' +
+    '<path d="M3 12 H7"/><path d="M7 12 C 10 12, 10 5, 13 5"/>' +
+    '<path d="M7 12 C 10 12, 10 12, 13 12"/><path d="M7 12 C 10 12, 10 19, 13 19"/></g>' +
+    '<g fill="currentColor"><circle cx="3" cy="12" r="1.9"/><circle cx="15" cy="5" r="1.9"/>' +
+    '<circle cx="15" cy="12" r="1.9"/><circle cx="15" cy="19" r="1.9"/></g></svg>'
+
+  /* the card's heartbeat strip, drawn once — it is a still surface here, and a
+     card judged with a hole in it is not the card */
+  function drawCardTrace() {
+    var el = document.getElementById('tcv')
+    var r = el.getBoundingClientRect()
+    if (!r.width) return
+    var dpr = Math.min(window.devicePixelRatio || 1, 2)
+    el.width = Math.round(r.width * dpr); el.height = Math.round(r.height * dpr)
+    var c = el.getContext('2d')
+    c.setTransform(dpr, 0, 0, dpr, 0, 0)
+    c.clearRect(0, 0, r.width, r.height)
+    var n = 46, pts = []
+    for (var i = 0; i < n; i++) pts.push(34 + Math.sin(i * 0.7) * 7 + Math.sin(i * 0.23) * 5 + (i % 9 === 0 ? 9 : 0))
+    c.beginPath()
+    pts.forEach(function (v, i2) {
+      var x = 15 + i2 * ((r.width - 30) / (n - 1))
+      var y = r.height - 10 - (v / 90) * (r.height - 20)
+      i2 ? c.lineTo(x, y) : c.moveTo(x, y)
+    })
+    c.strokeStyle = '#6fdca0'; c.lineWidth = 1; c.globalAlpha = .85; c.stroke()
+    c.globalAlpha = 1
+  }
+
+  function relayout() { fitCardLayer(); drawCardTrace(); frame(lastDrawn) }
+  window.addEventListener('resize', relayout)
+
+  deaden()
+  var m = /(?:^|#|&)t=([\d.]+)/.exec(location.hash)
+  fitCardLayer(); drawCardTrace()
+  if (m) { gate.hidden = true; frame(authored(parseFloat(m[1]))); setLabel(parseFloat(m[1])) }
+  else { frame(authored(PLAY_FROM)); setLabel(PLAY_FROM); range.value = Math.round(PLAY_FROM * 100) }
+})()
+</script>
+</body>
+</html>

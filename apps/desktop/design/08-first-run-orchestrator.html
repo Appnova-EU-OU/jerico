@@ -1,0 +1,2535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jerico — First run in the browser: a group, and what the project remembers</title>
+<link rel="stylesheet" href="_fonts.css">
+<style>
+/* ------------------------------------------------------------------------ */
+/*  09 — a session that starts by remembering.                              */
+/*                                                                          */
+/*  A PROPOSAL, and the first of these sheets whose script is not invented:   */
+/*  it is `orchestrator-todo-run-instructions.ts` §3.0, "Blueprint           */
+/*  orientation (session start)", which orders the orchestrator to load      */
+/*  durable context and recent history as its FIRST actions of every session, */
+/*  three tools in parallel:                                                 */
+/*                                                                          */
+/*     bridge_get_blueprint          durable spec and goals                  */
+/*     bridge_get_project_memory     permanent constraints, decisions,       */
+/*                                   active blockers                        */
+/*     bridge_get_project_events     the last 10 events                      */
+/*                                                                          */
+/*  The subject is not "a feed of what happened". The event log holds two    */
+/*  kinds of memory and the second one is the interesting one:               */
+/*                                                                          */
+/*   · WHAT HAPPENED — decision, discovery, blocker, phase_complete, note,   */
+/*     warning (bridge_record_event's own list)                             */
+/*   · WHAT STILL HOLDS — a permanent event carrying a trusted tag is a      */
+/*     durable GUARDRAIL. `bridge_get_project_memory` is the filtered view   */
+/*     of the same log: it excludes events recorded on a different git       */
+/*     branch than your checkout, and reports the ones it could not resolve  */
+/*     as `advisory.unresolved` with "verify before relying on them".        */
+/*                                                                          */
+/*  And the part worth a whole beat: THE ORCHESTRATOR DOES NOT GET TO        */
+/*  PROMOTE A MEMORY INTO A RULE. `bridge_dispatch_brief` auto-includes the  */
+/*  server-trusted durable guardrails and "fails closed if they cannot be    */
+/*  read". The prompt forbids hand-wrapping anything merely READ into        */
+/*  <mandatory_project_guardrails> and states plainly that `applicability`   */
+/*  (branch-relevance) is never a trust label. What makes a memory binding   */
+/*  is provenance — not recency, and not that it applies to your branch.     */
+/*                                                                          */
+/*  SAMPLE CONTENT, REAL SURFACE. The surface, its palette and every tool    */
+/*  name are the product's. The terminal's transcript and the log rows are a */
+/*  worked example — see the note on it; the exact rendering of a Claude     */
+/*  Code tool result is NOT claimed here, only the calls.                    */
+/* ------------------------------------------------------------------------ */
+
+:root {
+  --bg: #0b0b0b; --ink: #f2f0ec; --ink-2: #a5a19a; --ink-3: #8e8a83; --ink-ghost: #807d74;
+  --rule: #232322; --rule-2: #34342f;
+  --display: "Archivo", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(.2,.7,.2,1);
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display);
+  font-size: 15px; line-height: 1.58; -webkit-font-smoothing: antialiased; }
+.plate { max-width: 1180px; margin: 0 auto; padding: clamp(26px,4.5vw,54px) clamp(18px,4vw,40px) 90px; }
+.slug { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-ghost); padding-bottom: 13px; border-bottom: 1px solid var(--rule); }
+.slug .r { margin-left: auto; }
+h1 { margin: 26px 0 0; font-size: clamp(30px, 5.4vw, 50px); font-weight: 600; font-stretch: 118%;
+  letter-spacing: -.028em; line-height: 1.03; text-wrap: balance; }
+h1 em { font-style: normal; font-weight: 300; font-stretch: 125%; letter-spacing: -.012em; }
+.lede { margin: 16px 0 0; max-width: 62ch; color: var(--ink-2); font-size: 15px; }
+.lede b { color: var(--ink); font-weight: 500; }
+.lede code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+/* ══ THE STAGE ══════════════════════════════════════════════════════════ */
+.stage { position: relative; margin-top: 28px; aspect-ratio: 16/10;
+  border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+  background:
+    radial-gradient(58% 44% at 18% 22%, #8ea6d8 0%, transparent 62%),
+    radial-gradient(52% 46% at 82% 30%, #f0d8a8 0%, transparent 60%),
+    radial-gradient(64% 52% at 62% 88%, #e0a2a8 0%, transparent 62%),
+    linear-gradient(148deg, #6f86bd 0%, #b9c3dd 44%, #efd7b4 78%, #dda9a6 100%); }
+
+/* the two windows already open, verbatim from 07 — they are the same desktop */
+.desk-win {
+  position: absolute; z-index: 1; border-radius: 9px;
+  background: rgba(252,251,249,.9); box-shadow: 0 24px 60px -20px rgba(20,26,50,.45);
+  border: 1px solid rgba(255,255,255,.6);
+}
+.desk-win .tb { height: 26px; border-bottom: 1px solid rgba(0,0,0,.07); display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.desk-win .tb i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.desk-win .body { padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+.desk-win .body span { display: block; height: 7px; border-radius: 3px; background: rgba(20,26,50,.11); }
+
+.desk-bar { position: absolute; inset: 0 0 auto 0; height: 26px; z-index: 2;
+  display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%);
+  font-family: var(--mono); font-size: 10.5px; color: rgba(20,20,20,.68); }
+.desk-bar .sp { flex: 1; }
+/* The mark is simply THERE. 07's last durable act is the icon arriving in the
+   menu bar, so by the time this plays it is furniture; drawing its arrival
+   again would undo 07's payoff. */
+.desk-bar .glyph { display: inline-flex; color: rgba(20,20,20,.78); }
+
+.brow { position: absolute; left: 3.4%; top: 6.4%; width: 93.2%; height: 88%;
+  z-index: 1; border-radius: 10px; overflow: hidden;
+  background: var(--o-base); border: 1px solid rgba(0,0,0,.5);
+  box-shadow: 0 34px 80px -26px rgba(12,16,32,.72), 0 0 0 .5px rgba(0,0,0,.4);
+  display: flex; flex-direction: column; }
+.brow .btop { height: 32px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 11px; background: #1b1b1e; border-bottom: 1px solid rgba(0,0,0,.45); }
+.brow .lights { display: flex; gap: 7px; }
+.brow .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.brow .tab { display: flex; align-items: center; gap: 7px; height: 22px; padding: 0 11px;
+  border-radius: 5px; background: var(--o-base); font-size: 11px; color: var(--o-t300); }
+.brow .tab .fav { width: 11px; height: 11px; display: inline-flex; color: var(--o-accent-text); }
+.brow .url { margin-left: auto; height: 21px; display: flex; align-items: center;
+  padding: 0 12px; border-radius: 11px; background: rgba(255,255,255,.05);
+  font-family: var(--mono); font-size: 10.5px; color: var(--o-t400); }
+
+/* ══ THE WEB APP, in its own tokens ═════════════════════════════════════ */
+.brow {
+  --o-base: #111113; --o-elev: #18181b; --o-sheet: #141416; --o-tab: #1e1e1e;
+  --o-t200: rgba(255,255,255,.80); --o-t300: rgba(255,255,255,.70);
+  --o-t400: rgba(255,255,255,.55); --o-t500: rgba(255,255,255,.35);
+  --o-faint: rgba(255,255,255,.20);
+  --o-b-sub: rgba(255,255,255,.06); --o-b-def: rgba(255,255,255,.08);
+  --o-b-str: rgba(255,255,255,.12);
+  --o-accent: #d97706; --o-accent-text: #fbbf24; --o-accent-border: rgba(245,158,11,.30);
+  --o-accent-subtle: rgba(245,158,11,.10);
+  --o-running: #34d399; --o-blocked: #fbbf24; --o-error: #ef4444;
+  --o-finished: #059669; --o-idle: rgba(255,255,255,.07);
+  --o-scope-p: #f59e0b;      /* scope-project — amber-500 */
+  --o-scope-w: #8b5cf6;      /* scope-workspace — violet-500 */
+  --o-grp: #6366f1;          /* a new group's colour: the schema table default */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.vp { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--o-base); }
+
+/* ── the project page, behind. Only visible while the sheet is still down,
+      which is exactly why it is drawn: the rise has to rise over something. */
+.page-hd { height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  border-bottom: 1px solid var(--o-b-sub); }
+.page-hd .pn { font-size: 12px; font-weight: 600; color: var(--o-t200); }
+.page-hd .tabs { display: flex; gap: 2px; }
+.page-hd .tabs span { font-size: 11px; color: var(--o-t500); padding: 3px 6px; border-radius: 4px; }
+.page-hd .tabs span.on { color: var(--o-t200); background: var(--o-tab); }
+.page-mid { height: calc(100% - 38px); display: flex; align-items: center; justify-content: center; }
+.page-mid .in { text-align: center; max-width: 300px; }
+.page-mid .ic { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 14px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--o-b-def);
+  display: flex; align-items: center; justify-content: center; color: var(--o-t500); }
+.page-mid h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--o-t200); }
+.page-mid p { margin: 0; font-size: 12px; color: var(--o-t500); line-height: 1.5; }
+
+/* ── the backdrop the sheet dismisses on ────────────────────────────────── */
+#bd { position: absolute; inset: 0; background: rgba(0,0,0,.55); opacity: 0; }
+
+/* ══ THE ORCHESTRATOR SHEET ═════════════════════════════════════════════ */
+/*  `fixed inset-x-0 h-[100dvh]` with `bottom` animated. Drawn here as a
+    translate, which is the same movement; the sheet is the full viewport
+    height, so when it is up it covers the page entirely.                  */
+#sheet { position: absolute; inset: 0; display: flex; flex-direction: column;
+  background: var(--o-base); border-top: 1px solid var(--o-b-sub);
+  box-shadow: 0 -25px 50px -12px rgba(0,0,0,.6);
+  transform: translateY(100%); }
+
+/* header */
+.shd { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-bottom: 1px solid var(--o-b-sub); }
+.shd .cpu { color: var(--o-blocked); display: inline-flex; }
+.shd .ti { font-size: 13px; font-weight: 500; color: var(--o-t200); }
+.shd .chip { font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.20); color: var(--o-scope-p); }
+/* the codegraph badge really does read "not indexed" on a fresh project —
+   this is the same string that got act two's codegraph beat cut */
+.shd .cg { font-family: var(--mono); font-size: 10px; color: var(--o-faint);
+  border: 1px solid var(--o-b-def); border-radius: 4px; padding: 1px 5px; }
+.shd .sp { flex: 1; }
+.shd .ib { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; color: var(--o-t300); }
+
+/* body: the real grid */
+.sbody { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 8px;
+  grid-template-columns: 66px minmax(0,1fr) 222px; }
+/* NOT overflow:hidden. The real right column is `flex flex-col bg-surface-base
+   rounded-lg border border-border-subtle min-h-0` — no clip — and it cannot be
+   one, because the ＋ Agent and Group menus are absolutely positioned inside its
+   footer and have to escape it. Clipping here cut the menu off at the card edge,
+   which is a bug this drawing invented and the product does not have. Only the
+   two regions that really do clip are given it below. */
+.card { background: var(--o-base); border: 1px solid var(--o-b-sub); border-radius: 8px;
+  min-height: 0; display: flex; flex-direction: column; }
+
+/* LEFT RAIL — this one really does clip: the component scrolls it
+   (`overflow-y-auto`), which means the active tile's 1.1 scale and its glow are
+   trimmed at 66pt in the product too. Kept, rather than quietly given room. */
+.rail { align-items: center; gap: 10px; padding: 12px 10px; overflow: hidden; }
+.rail .tile { width: 44px; height: 44px; border-radius: 8px; flex: none; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; line-height: 1; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.7), 0 0 2px rgba(0,0,0,.5); }
+/* inactive tiles are desaturated and dimmed, not greyed out */
+.rail .tile.off { box-shadow: 0 0 0 1px var(--o-b-sub); filter: saturate(.55) brightness(.85); }
+/* The active tile is not merely bigger: `scale-[1.1] z-10` AND
+   `box-shadow: 0 0 0 2px var(--t-accent), 0 0 13px -1px <tileColor>` — the ring is
+   the app's accent, the glow is the project's own colour. Both are written inline
+   from `state(t)` during the switch, because a CSS transition runs on wall-clock
+   time and every visual here has to be a function of t. */
+.rail .tile.on { transform: scale(1.1); z-index: 10;
+  box-shadow: 0 0 0 2px var(--o-accent), 0 0 13px -1px var(--tc); }
+.rail .tile .rdot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--o-running); }
+/* The dot has an order of precedence in the component and the colours differ:
+   an error count wins as a NUMBER, then `projectHasRunning` — any non-orchestrator
+   panel running — in status-running green, and only then `tabGlyph` in
+   status-blocked amber for a live orchestrator with nothing under it yet. So green
+   means a worker is up in that project, amber means only the orchestrator is, and
+   jerico shows both in turn as the scene staffs it. */
+.rail .tile .rdot.live { background: var(--o-blocked); }
+/* The rail's tooltip. The tile is two letters wide, so the project's NAME lives
+   here — `on:mouseenter` and `on:focus` both raise it, which is why it belongs in
+   a scene whose vocabulary is focus rather than a pointer. Anchored `rect.right +
+   10` and vertically centred, exactly as the component computes it, and drawn
+   OUTSIDE the rail because the rail clips. */
+.rtip { position: absolute; z-index: 60; pointer-events: none; padding: 6px 10px;
+  border-radius: 6px; font-size: 12px; font-weight: 500; line-height: 1.2;
+  white-space: nowrap; transform: translateY(-50%);
+  background: var(--o-elev); color: var(--o-t200); border: 1px solid var(--o-b-def);
+  box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+.rail .foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.rail .foot .wb { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; color: var(--o-faint); }
+
+/* CENTRE */
+.mid .mhd { flex: none; display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  border-bottom: 1px solid var(--o-b-sub); }
+.mid .mhd .cpu { color: rgba(139,92,246,.7); display: inline-flex; }
+.mid .mhd .ti { font-size: 12px; font-weight: 500; color: var(--o-t200); }
+/* the centre's own project pill is violet and ROUNDED-FULL, where the sheet
+   header's is amber and rounded-4 — two different scope colours on one
+   surface, which is the component as written */
+.mid .mhd .pill { font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 999px;
+  background: rgba(139,92,246,.10); border: 1px solid rgba(139,92,246,.20); color: var(--o-scope-w); }
+.mid .form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 13px;
+  padding: 15px; }
+.mid .mrow { display: flex; align-items: center; gap: 7px; flex: none; }
+.mid .mchip { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--o-t300);
+  background: var(--o-elev); border: 1px solid var(--o-b-def); border-radius: 4px; padding: 5px 9px; }
+.mid .mchip i { width: 6px; height: 6px; border-radius: 50%; background: var(--o-running); display: block; }
+.mid .via { font-size: 11px; color: var(--o-t500); }
+.mid .sel { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--o-t300);
+  background: var(--o-elev); border: 1px solid var(--o-b-def); border-radius: 4px; padding: 5px 9px; }
+.mid .sel .cv { font-size: 8px; opacity: .55; }
+.mid .spec { flex: 1; min-height: 78px; background: var(--o-sheet); border: 1px solid var(--o-b-def);
+  border-radius: 4px; padding: 12px 15px; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,.20); }
+.mid .run { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 12px; font-weight: 500; color: #1c1917; background: var(--o-accent);
+  border-radius: 5px; padding: 10px; }
+.mid .bc { flex: none; border-top: 1px solid var(--o-b-sub); padding-top: 8px;
+  display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--o-t500); }
+
+/* RIGHT */
+.rt .rhd { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-bottom: 1px solid var(--o-b-sub); }
+.rt .rhd .pn { font-size: 12.5px; font-weight: 500; color: var(--o-t200); flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt .bg { display: flex; border: 1px solid var(--o-b-def); border-radius: 5px; overflow: hidden; }
+.rt .bg span { font-size: 10.5px; color: var(--o-t500); padding: 3px 7px; display: flex;
+  align-items: center; gap: 4px; }
+.rt .bg span.on { color: var(--o-t200); background: var(--o-tab); }
+.rt .bg span b { font-family: var(--mono); font-size: 9px; opacity: .8; font-weight: 400; }
+.rt .search { flex: none; padding: 8px 8px 4px; }
+.rt .search span { display: flex; align-items: center; height: 26px; padding: 0 9px;
+  background: var(--o-elev); border: 1px solid var(--o-b-def); border-radius: 6px;
+  font-size: 11.5px; color: var(--o-faint); }
+.rt .chips { flex: none; display: flex; gap: 4px; padding: 0 8px 6px; }
+.rt .chips span { display: inline-flex; align-items: center; gap: 4px; font-size: 10px;
+  font-family: var(--mono); padding: 1px 6px; border-radius: 999px; }
+.rt .chips .run { color: var(--o-running); background: rgba(52,211,153,.10);
+  border: 1px solid rgba(52,211,153,.25); }
+.rt .list { flex: 1; min-height: 0; padding: 0 6px; overflow: hidden; }
+/* the footer must not clip its own menus either */
+.ofoot, .rt { overflow: visible; }
+
+.mach { display: flex; align-items: center; gap: 6px; padding: 2px 4px 5px; }
+.mach i { width: 6px; height: 6px; border-radius: 50%; background: rgba(52,211,153,.6); display: block; }
+.mach span { font-size: 10px; color: var(--o-faint); }
+
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 26px 8px; text-align: center; }
+.empty p { margin: 0; font-size: 11px; color: var(--o-faint); line-height: 1.45; }
+.btn-p { font-size: 11px; font-weight: 500; color: #1c1917; background: var(--o-accent);
+  border: 0; border-radius: 5px; padding: 5px 11px; }
+
+.wrow { display: flex; align-items: center; gap: 8px; padding: 5px 9px; border-radius: 6px; }
+.wrow .tree { font-family: var(--mono); font-size: 10px; line-height: 1;
+  color: rgba(99,102,241,.55); flex: none; }
+.wrow .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--o-idle); }
+.wrow .dot.run { background: var(--o-running); }
+.wrow .nm { font-size: 11px; color: var(--o-t400); flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.wrow.ingrp { border-radius: 0; border-left: 2px solid var(--o-grp);
+  background: rgba(99,102,241,.05); border-bottom: 1px solid var(--o-b-sub); }
+/* the planner group carries its own colour through the same two places the
+   component paints it — the header swatch and the rows' left edge
+   (`border-left: 2px solid <groupColor>` over `hexToRgba(color, .05)`) */
+#grp0 .wrow.ingrp { border-left-color: #ec4899; background: rgba(236,72,153,.05); }
+#grp0 .wrow .tree { color: rgba(236,72,153,.55); }
+
+.ghdr { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 5px;
+  border-left: 2px solid var(--o-grp); background: rgba(99,102,241,.05);
+  border-bottom: 1px solid rgba(99,102,241,.35); }
+.ghdr .chev { font-size: 9px; color: var(--o-faint); }
+.ghdr .sw { width: 10px; height: 10px; border-radius: 50%; background: var(--o-grp); flex: none; }
+.ghdr .gn { font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--o-t500); flex: 1; }
+.ghdr .cnt { display: flex; align-items: center; gap: 4px; font-family: var(--mono);
+  font-size: 10px; color: var(--o-faint); }
+.ghdr .cnt i { width: 6px; height: 6px; border-radius: 50%; background: var(--o-running); display: block; }
+
+.flash { padding: 4px 5px 0; font-size: 11px; color: var(--o-finished); }
+
+/* Views — a real section of the column, and its rows are previews and
+   simulators. Nothing in this scene creates one, so it stays at its label. */
+.views { flex: none; border-top: 1px solid var(--o-b-sub); padding: 6px 8px;
+  display: flex; align-items: center; gap: 6px; font-size: 10px;
+  font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--o-faint); }
+
+.ofoot { flex: none; display: flex; gap: 6px; padding: 7px; border-top: 1px solid var(--o-b-sub); }
+.gbtn { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-size: 11px; color: var(--o-t400); background: transparent; border: 1px solid var(--o-b-def);
+  border-radius: 5px; padding: 5px 8px; }
+.gbtn.hot { border-color: var(--o-b-str); background: rgba(255,255,255,.04); color: var(--o-t200); }
+.gbtn .cv { font-size: 8px; opacity: .6; }
+
+/* right-0, not left-0: both menus are `absolute right-0 … w-44` in the
+   component, and at a 222pt column the difference is not cosmetic — anchored
+   left, a 176pt menu runs off the panel. */
+.menu { position: absolute; right: 0; bottom: calc(100% + 5px); width: 176px;
+  background: var(--o-elev); border: 1px solid var(--o-b-def); border-radius: 6px;
+  padding: 4px 0; box-shadow: 0 18px 40px -14px rgba(0,0,0,.8); text-align: left; }
+.menu .it { display: flex; align-items: center; gap: 8px; padding: 5px 11px;
+  font-size: 11px; color: var(--o-t400); }
+.menu .it.on { background: var(--o-sheet); color: var(--o-t200); }
+.menu .it .pl { width: 14px; text-align: center; color: var(--o-t500); }
+.menu .sep { height: 1px; margin: 4px 0; background: var(--o-b-sub); }
+.menu .note { padding: 3px 11px; font-size: 10.5px; font-style: italic; color: var(--o-faint); }
+.menu .runner { padding: 5px 11px 7px; }
+.menu .runner p { margin: 0 0 5px; font-size: 10.5px; color: var(--o-faint); }
+.menu .runner .rin { display: flex; gap: 4px; }
+.menu .runner .rin span { flex: 1; font-size: 10.5px; color: rgba(255,255,255,.20);
+  padding: 3px 5px; border: 1px solid var(--o-b-sub); border-radius: 4px; background: rgba(255,255,255,.04); }
+.menu .runner .rin b { width: 21px; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: var(--o-accent-text); background: var(--o-accent-subtle);
+  border: 1px solid var(--o-accent-border); border-radius: 4px; }
+
+.spawnrow { display: flex; align-items: center; gap: 5px; width: 100%; }
+.spawnrow .chip { font-size: 10.5px; color: var(--o-t400); padding: 3px 5px;
+  background: var(--o-sheet); border: 1px solid var(--o-b-def); border-radius: 4px; white-space: nowrap; }
+.spawnrow .msel { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px;
+  font-size: 10.5px; color: var(--o-t300); padding: 3px 5px;
+  border: 1px solid var(--o-b-def); border-radius: 4px; }
+.spawnrow .go { font-size: 10.5px; font-weight: 500; color: #1c1917; background: var(--o-accent);
+  border-radius: 4px; padding: 4px 8px; white-space: nowrap; }
+
+.gform { flex: 1; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.gform .gin { flex: 1; min-width: 0; font-size: 11px; color: var(--o-t200);
+  background: var(--o-sheet); border: 1px solid var(--o-b-def); border-radius: 4px;
+  padding: 3px 7px; display: flex; align-items: center; }
+.gform .gin.focus { border-color: rgba(251,191,36,.6); }
+.gform .gin .ph { color: rgba(255,255,255,.20); }
+.gform .gin .car { display: inline-block; width: 1px; height: 11px; margin-left: 1px;
+  background: var(--o-t200); }
+.gform .ok { font-size: 10px; color: #1c1917; background: var(--o-accent);
+  border-radius: 4px; padding: 3px 7px; }
+
+
+/* ══ WHAT 09 ADDS TO THE SURFACE ════════════════════════════════════════ */
+/*  The centre column is no longer the spec form: a run is live, so it is
+    the orchestrator's own terminal. Everything else — sheet, rail, right
+    column, register — is carried from 08 unchanged, because it is the same
+    surface and a second drawing of it would start drifting immediately.  */
+
+.mid .term { flex: 1; min-height: 0; padding: 11px 13px; overflow: hidden;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.72; color: var(--o-t400); }
+.mid .term .ln { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.mid .term .ctx { color: var(--o-scope-w); }
+.mid .term .call { color: var(--o-t200); }
+.mid .term .call b { color: var(--o-accent-text); font-weight: 400; }
+.mid .term .res { color: var(--o-t500); }
+.mid .term .say { color: var(--o-t300); }
+.mid .term .say b { color: var(--o-t200); font-weight: 500; }
+.mid .term .car { display: inline-block; width: 6px; height: 12px; margin-left: 2px;
+  background: var(--o-t400); vertical-align: -1px; }
+
+/* the run progress the sheet header carries while a run is live */
+.shd .prog { display: flex; align-items: center; gap: 6px; }
+.shd .prog .n { font-family: var(--mono); font-size: 10.5px; color: rgba(251,191,36,.7); }
+.shd .prog .bar { width: 56px; height: 2px; border-radius: 2px; background: var(--o-idle); overflow: hidden; }
+.shd .prog .bar i { display: block; height: 2px; background: rgba(251,191,36,.7); }
+
+/* ── the worker overlay ─────────────────────────────────────────────────── */
+/*  Expanding a worker row does not swap the centre column — it opens an
+    overlay INSIDE the sheet: a `fixed inset-0 z-[59] bg-black/60` backdrop and
+    a `fixed inset-4 z-[60] rounded shadow-2xl bg-surface-base border` pane,
+    with `{agentKey} worker` and a model pill in its header, a force-redraw
+    button, and a "Move to bottom" dash. Read out of the component, not guessed:
+    this is the one surface where a rule visibly arrives somewhere.            */
+#wovbd { position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,.6); opacity: 0;
+  pointer-events: none; }
+/* Not `inset: 18px` all round. In this film the bottom of the frame belongs to the
+   caption strip — measured, the envelope's last line was printing under "and the
+   rules travel with the work" — so a full-bleed surface stops above it. The
+   component's own overlay is `inset-4`; the difference is the strip, and it is a
+   film-level rule rather than a property of the product. */
+#wov { position: absolute; inset: 18px 18px 132px; z-index: 21; border-radius: 4px;
+  background: var(--o-base); border: 1px solid var(--o-b-def);
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.75);
+  display: flex; flex-direction: column; opacity: 0; pointer-events: none;
+  transform: scale(.985); transform-origin: 50% 60%; }
+#wov .whd { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-bottom: 1px solid var(--o-b-sub); }
+#wov .whd .who { font-size: 11.5px; color: var(--o-t400); }
+#wov .whd .pill2 { font-size: 10px; color: var(--o-t500); border: 1px solid var(--o-b-def);
+  border-radius: 999px; padding: 0 7px; }
+#wov .whd .sp { flex: 1; }
+#wov .whd .ib { width: 20px; height: 20px; display: flex; align-items: center;
+  justify-content: center; border-radius: 4px; color: var(--o-t500); }
+/* A terminal puts new text at the BOTTOM, and a worker that has been running has
+   scrollback. Rendered from the top into an empty pane, eleven lines of envelope
+   left three quarters of a full-screen frame black and read as a broken panel —
+   and it also put the newest content at the top, which no terminal does. */
+#wov .wterm { flex: 1; min-height: 0; padding: 12px 15px; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  font-family: var(--mono); font-size: 12px; line-height: 1.75; color: var(--o-t400); }
+#wov .wterm .old { color: var(--o-faint); }
+#wov .wterm .ln { white-space: pre-wrap; }
+/* the envelope the server puts around a dispatch, and the block it puts inside */
+#wov .wterm .env { color: var(--o-scope-w); }
+#wov .wterm .grd { color: var(--o-accent-text); }
+#wov .wterm .rule { color: var(--o-t200); }
+#wov .wterm .body { color: var(--o-t300); }
+#wov .wterm .car { display: inline-block; width: 6px; height: 12px; margin-left: 2px;
+  background: var(--o-t400); vertical-align: -1px; }
+
+/* ── the Events tab, revealed when the sheet goes back down ─────────────── */
+/*  ProjectRunHistory.svelte → Actions → Events. A row is:
+      [role] [type dot] summary … [scope badge] [agent declared] [ago] [persona]
+    and a row that does not apply to your checkout is drawn at 50%.        */
+.ev { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; }
+.ev .subtabs { display: flex; gap: 4px; margin-bottom: 3px; }
+.ev .subtabs span { font-size: 11px; color: var(--o-t500); padding: 3px 8px; border-radius: 4px; }
+.ev .subtabs span.on { color: var(--o-t200); background: var(--o-tab); }
+.ev .filters { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+.ev .filters .rf { font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.1); color: rgba(255,255,255,.2); }
+.ev .filters .sel, .ev .filters .srch { font-size: 10.5px; color: var(--o-t500);
+  background: #111113; border: 1px solid rgba(255,255,255,.1); border-radius: 4px; padding: 1px 6px; }
+.ev .row { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.06); border-radius: 4px; }
+.ev .row.mute { opacity: .5; }
+.ev .row .role { font-size: 10.5px; font-weight: 500; padding: 0 5px; border-radius: 4px;
+  border: 1px solid; }
+/* the component's own role palette, verbatim */
+.ev .role.orchestrator { color: #f472b6; border-color: rgba(236,72,153,.3); background: rgba(236,72,153,.1); }
+.ev .role.reviewer     { color: #fbbf24; border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.1); }
+.ev .role.developer    { color: #60a5fa; border-color: rgba(59,130,246,.3); background: rgba(59,130,246,.1); }
+.ev .role.planner      { color: #c084fc; border-color: rgba(168,85,247,.3); background: rgba(168,85,247,.1); }
+.ev .role.system       { color: #22d3ee; border-color: rgba(6,182,212,.3); background: rgba(6,182,212,.1); }
+.ev .row .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.ev .row .sum { font-size: 11.5px; color: var(--o-t300); flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ev .row .badge { font-size: 10.5px; padding: 0 4px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.1); color: rgba(255,255,255,.4); }
+.ev .row .ago { font-size: 10.5px; color: var(--o-faint); }
+.ev .row .pid { font-family: var(--mono); font-size: 10.5px; color: rgba(165,180,252,.5); }
+.ev .tags { display: flex; gap: 4px; padding: 0 8px 2px; }
+.ev .tags span { font-size: 10.5px; padding: 0 4px; border-radius: 3px;
+  background: rgba(255,255,255,.04); color: var(--o-t500); }
+/* the row this run just wrote, lit for a moment as it lands */
+.ev .row.fresh { border-color: rgba(52,211,153,.35); background: rgba(52,211,153,.06); }
+
+
+/* ── present mode ──────────────────────────────────────────────────────────
+   `?present` or `#present`: the review document steps out of the way and the
+   stage becomes the whole screen. Not a different drawing — the same stage, with
+   the plate, the beat table, the notes and the scrubber removed and the frame
+   unbounded, so the piece can be watched as a piece instead of read as a spec.
+   The HUD stays: Skip must remain reachable, and it is still the first tab stop. */
+body.present { overflow: hidden; background: #000; }
+body.present .plate { max-width: none; margin: 0; padding: 0; }
+body.present .slug, body.present h1, body.present .lede,
+body.present .scrub, body.present .beats, body.present .annot { display: none; }
+/* Letterboxed, not stretched. The stage's canvas has a 1280x800 backing store
+   drawn at 100%/100%, so an unbounded stage on a screen that is not 16:10
+   squashes the film — measured on this machine, 1512x982 is 1.54 and the whole
+   frame came out short. It keeps its ratio and the screen keeps the difference. */
+body.present .stage {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  margin: 0; border: 0; border-radius: 0;
+  width: min(100vw, 160vh); height: min(100vh, 62.5vw);
+  aspect-ratio: 16 / 10;
+}
+/* The illustrated desktop is a review fixture. Product/flow mode places only
+   the browser and orchestrator surface over the user's live desktop. */
+body.app, body.app.present, body.app.present .stage { background: transparent; }
+body.app .desk-bar, body.app .desk-win { display: none; }
+
+/* ── the lit subject ───────────────────────────────────────────────────────
+   The statement used to carry a dark falloff, which meant the thing being
+   described was DIMMED to make its description legible — backwards. This is the
+   film's own move instead, the one the warm bleed already uses: `plus-lighter`
+   adds light and leaves transparency alone, so the subject brightens while
+   everything else stays where it was. Sized and placed from the subject's own
+   measured box, feathered so it reads as light rather than as a box. */
+/* ── the lit box ───────────────────────────────────────────────────────────
+   Square and definite, and the fill is NOT flat. A flat additive tint is fine
+   on something small and turns a large subject into a milky panel — measured on
+   the written block, where .13 over 900 x 330 read as a grey sheet laid over the
+   terminal and swallowed its own edge. So fill and edge are separated: the edge
+   is always a crisp hairline, and the fill is set per subject from its area
+   (`--fill`), close to nothing when the box is big.
+
+   What is left doing the work is the boundary, treated the way this language
+   treats everything else — a hairline, and light rather than pigment. It pools
+   toward the BOTTOM edge, because the film's own dawn rises from below the frame
+   and a box lit from above would contradict it.
+
+   Two diagonal corner marks, top-left and bottom-right. A registration mark is
+   editorial vocabulary, which is where this whole language comes from, and two
+   corners state the rectangle more precisely than four decorate it. */
+#lit { position: absolute; z-index: 5; opacity: 0; pointer-events: none;
+  --fill: .10; --edge: .40;
+  mix-blend-mode: plus-lighter; border-radius: 2px;
+  background: linear-gradient(to top, rgba(255,236,198,var(--fill)), rgba(255,236,198,0) 72%);
+  box-shadow: inset 0 0 0 1px rgba(255,244,214,var(--edge)),
+              inset 0 -1px 0 0 rgba(255,248,228,calc(var(--edge) * 1.5)); }
+/* the mark scales with the box: a fixed 13px corner ran nearly the whole side of
+   a 38 x 29 subject and read as a broken border rather than a mark */
+#lit::before, #lit::after {
+  content: ""; position: absolute; width: var(--mark, 13px); height: var(--mark, 13px);
+  border-color: rgba(255,250,232,calc(var(--edge) * 1.9)); border-style: solid; border-width: 0;
+}
+#lit::before { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
+#lit::after { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
+
+/* On a LIGHT ground additive light cannot point at anything — measured on the
+   tray glyph over the wallpaper, where `plus-lighter` at .16 saturated to a white
+   square and swallowed the mark inside it. There the box stops being a light and
+   becomes a frame: no fill, a dark hairline, normal blending. Same rectangle,
+   same corners, opposite polarity — which is the same idea either way, marking
+   the subject with the least ink that will read on what it sits on. */
+#lit.on-light { mix-blend-mode: normal; background: none;
+  box-shadow: inset 0 0 0 1px rgba(12,14,20,.52), inset 0 -1px 0 0 rgba(12,14,20,.66); }
+#lit.on-light::before, #lit.on-light::after { border-color: rgba(12,14,20,.78); }
+/* Large subjects used to look like a design-tool selection box. Their content is
+   already structured, so a restrained lower hairline is enough; registration
+   corners remain only on small, precise controls. */
+#lit.large { background: linear-gradient(to top, rgba(255,236,198,var(--fill)), rgba(255,236,198,0) 52%);
+  box-shadow: inset 0 -1px 0 rgba(255,248,228,var(--edge)); }
+#lit.large::before, #lit.large::after { display: none; }
+
+/* ── the sheet arrives in pieces ───────────────────────────────────────────
+   The mosaic that used to live here is gone. It was the fifth arrival tried and
+   the only one that moved nothing, which is exactly what was wrong with it in
+   sequence: coming out of 07 it read as the screen going dark and the orchestrator
+   then simply being there. The pieces travel now, from the bottom, in the
+   component's own direction — the geometry is in the script, next to the clock
+   that drives it. Nothing here needs a layer of its own any more. */
+
+/* ── the announced track ────────────────────────────────────────────────── */
+/*  The statements ARE the content, and they are painted onto a canvas, which
+    means a screen reader gets a focused surface that says nothing at all — the
+    film's oldest open item, inherited by all three of these. So the same text
+    is also carried in a polite live region: not a description of the picture,
+    which would be narration, but the one line the picture is there to deliver.
+    Announced once each, in order, and the way out is stated up front. */
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── the film's own two layers, verbatim from 04 ────────────────────────── */
+#scrim { position: absolute; inset: 0; z-index: 4; opacity: 0;
+  background: linear-gradient(180deg, #070a12 0%, #0a0b10 46%, #120c08 100%); }
+#bleed { position: absolute; inset: 0; z-index: 5; opacity: 0; pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  background:
+    radial-gradient(120% 62% at 50% 104%, rgba(255,168,74,.62) 0%, rgba(196,92,26,.26) 34%, rgba(0,0,0,0) 68%),
+    radial-gradient(70% 40% at 50% 88%, rgba(255,214,150,.34) 0%, rgba(0,0,0,0) 70%); }
+canvas#cv { position: absolute; inset: 0; z-index: 6; width: 100%; height: 100%; display: block; }
+canvas#curs { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%;
+  display: block; pointer-events: none; }
+
+.hud { position: absolute; inset: auto 0 0 0; z-index: 8; display: flex; align-items: center;
+  padding: 0 16px 14px; pointer-events: none; }
+.hud button { pointer-events: auto; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase; color: rgba(242,240,236,.6);
+  background: rgba(20,20,20,.35); border: 0; border-radius: 2px; padding: 6px 10px; cursor: pointer; }
+.hud button:hover { color: #fff; background: rgba(20,20,20,.55); }
+.hud .sp { flex: 1; order: 2; }
+.hud #mute { order: 1; }
+.hud #skip { order: 3; }
+.gate { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center;
+  background: rgba(11,11,11,.86); }
+.gate[hidden] { display: none; }
+.gate .in { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gate p { margin: 0; max-width: 38ch; font-size: 12.5px; color: var(--ink-3); }
+.btn { display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono);
+  font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase;
+  padding: 12px 20px; border-radius: 2px; border: 1px solid var(--ink);
+  background: var(--ink); color: var(--bg); cursor: pointer; }
+.btn:hover { background: #fff; }
+.scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.scrub input[type=range] { flex: 1; accent-color: #f2f0ec; height: 3px; }
+.scrub .t { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); min-width: 84px; }
+.beats { margin-top: 38px; border-top: 1px solid var(--rule); }
+.beats > div { display: flex; gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--rule);
+  align-items: baseline; }
+.beats .tt { font-family: var(--mono); font-size: 10.5px; color: var(--ink-ghost); min-width: 78px; flex: none; }
+.beats .nm { font-size: 13.5px; font-weight: 500; color: var(--ink); min-width: 124px; flex: none; }
+.beats .ds { font-size: 13px; color: var(--ink-2); }
+.beats .ds b { color: var(--ink); font-weight: 500; }
+.beats .ds em { font-style: italic; color: var(--ink-3); }
+.beats .ds code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+@media (max-width: 640px) { .beats > div { flex-direction: column; gap: 4px; } }
+.annot { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--rule);
+  display: grid; gap: 26px 44px; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); }
+.annot section { display: flex; flex-direction: column; gap: 7px; }
+.annot h3 { margin: 0; font-family: var(--mono); font-size: 9.5px; font-weight: 400;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-ghost); }
+.annot p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.annot p b { color: var(--ink); font-weight: 500; }
+.annot code { font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  background: #121212; border: 1px solid var(--rule); border-radius: 2px; padding: 1px 4px; }
+.annot em { font-style: italic; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="plate">
+
+  <div class="slug">
+    <span>Jerico</span><span>First run · the browser</span>
+    <span class="r">Proposal 08 · rev D — one surface, one sequence</span>
+  </div>
+
+  <h1>A group, four tools,<br><em>and what the project remembers</em>.</h1>
+
+  <p class="lede">
+    Where the desktop film hands over. One surface and one sequence: the project is chosen, the
+    orchestrator is started, a group is named, four installed tools go into it — and <b>everything after that happens to the group you
+    just watched being built</b>. It replaced two separate videos in which one made a group and never
+    sent it anything, and the other dispatched to workers that arrived from nowhere.
+  </p>
+  <p class="lede">
+    Every string in the frame is the product's own, read out of
+    <code>GlobalOrchestratorPanel.svelte</code>, <code>ProjectRunHistory.svelte</code>,
+    <code>orchestrator-todo-run-instructions.ts</code> and the MCP tool definitions. Where the product
+    has no true content the scene does not go: no schema beat, because <code>group_schemas</code>
+    ships no presets.
+  </p>
+
+  <div class="stage" id="stage">
+    <p class="sr">Jerico first-run sequence. Press Escape or Skip to leave it.</p>
+      <div class="sr" role="status" aria-live="polite" id="say"></div>
+    <!-- ── the room 07 leaves ────────────────────────────────────────────────
+         This used to open on an EMPTY desktop with "Chrome" in the menu bar at
+         09:12, while 07's last frame is two Finder windows at 06:14. Watched in
+         sequence the cut therefore threw away everything on screen and replaced
+         the menu bar's owner and its clock in the same frame — which is most of
+         what read as "it goes dark and the orchestrator is suddenly there".
+
+         Same wallpaper, same clock, same two windows, same frontmost app. The
+         only thing the cut brings is a browser in front of them — with the menu
+         bar changing owner in the same frame, which is what macOS does and what
+         07 would have done if it had kept going. -->
+    <div class="desk-bar" aria-hidden="true">
+      <strong style="font-weight:600">Chrome</strong><span>File</span><span>Edit</span><span>View</span>
+      <span class="sp"></span>
+      <span class="glyph" id="trayglyph"></span>
+      <span>Fri 7 Aug&nbsp;&nbsp;06:14</span>
+    </div>
+    <div class="desk-win" style="left:8%;top:22%;width:40%;height:44%" aria-hidden="true">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="body"><span style="width:72%"></span><span style="width:88%"></span><span style="width:54%"></span><span style="width:80%"></span></div>
+    </div>
+    <div class="desk-win" style="left:44%;top:40%;width:44%;height:46%" aria-hidden="true">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="body"><span style="width:64%"></span><span style="width:90%"></span><span style="width:46%"></span></div>
+    </div>
+
+    <div class="brow" aria-hidden="true">
+      <div class="btop">
+        <span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+        <span class="tab"><span class="fav" id="favglyph"></span>jerico</span>
+        <span class="url">jerico.appnova.io</span>
+      </div>
+
+      <div class="vp">
+        <!-- the project page, on Actions → Events. The sheet covers it until the
+             last beat, when it goes back down and this is what is underneath. -->
+        <div class="page-hd">
+          <span class="pn">jerico</span>
+          <span class="tabs">
+            <span>Blueprint</span><span>Todos</span><span>Code</span><span>Design</span>
+            <span class="on">Actions</span><span>Personas</span><span>Schemas</span><span>Settings</span>
+            <span>Agents</span>
+          </span>
+        </div>
+        <div class="ev">
+          <div class="subtabs"><span>History</span><span class="on">Events</span></div>
+          <div class="filters">
+            <span class="rf">orchestrator</span><span class="rf">reviewer</span><span class="rf">developer</span>
+            <span class="sel">All types ▾</span><span class="srch">Search…</span>
+          </div>
+          <div id="evlist"></div>
+        </div>
+
+        <div id="bd"></div>
+
+        <div id="wovbd"></div>
+        <div id="wov">
+          <div class="whd">
+            <span class="who">claude worker</span>
+            <span class="pill2">Sonnet</span>
+            <span class="sp"></span>
+            <span class="ib"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6M20 4l-8 8M4 20l8-8" stroke-linecap="round"/></svg></span>
+            <span class="ib" id="wovmin"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14" stroke-linecap="round"/></svg></span>
+          </div>
+          <div class="wterm" id="wterm"></div>
+        </div>
+
+        <!-- ══ the orchestrator sheet ══ -->
+        <div id="sheet">
+          <span class="rtip" id="rtip" style="opacity:0">jerico</span>
+          <div class="shd">
+            <span class="cpu"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 9v6M20 9v6M9 4h6M9 20h6"/></svg></span>
+            <span class="ti">Orchestrator</span>
+            <span class="chip" id="hchip">jerico</span>
+            <span class="prog" id="prog"></span>
+            <span class="sp"></span>
+            <span class="ib"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/></svg></span>
+            <span class="ib" id="minbtn"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19.5 8.25l-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </div>
+
+          <div class="sbody">
+            <div class="card rail">
+              <span class="tile" id="tl-j" style="background:#6366f1;--tc:#6366f1">J<span class="rdot" id="dot-j"></span></span>
+              <span class="tile" id="tl-o" style="background:#0ea5e9;--tc:#0ea5e9">O<span class="rdot" id="dot-o"></span></span>
+              <span class="tile off" id="tl-a" style="background:#f43f5e;--tc:#f43f5e">A</span>
+              <span class="foot">
+                <span class="wb"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+              </span>
+            </div>
+
+            <!-- CENTRE: a run is live, so this is the orchestrator's terminal -->
+            <div class="card mid">
+              <div class="mhd">
+                <span class="cpu"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 9v6M20 9v6M9 4h6M9 20h6"/></svg></span>
+                <span class="ti">Orchestrator</span>
+                <span class="pill" id="mpill">jerico</span>
+              </div>
+              <div class="form" id="specform">
+                <div class="mrow">
+                  <span class="mchip"><i></i>mbp-14</span>
+                  <span class="via">via</span>
+                  <span class="sel">Claude Code <span class="cv">▼</span></span>
+                  <span class="sel">Sonnet <span class="cv">▼</span></span>
+                </div>
+                <div class="spec">Describe what to build or fix…<br><br>Leave blank for interactive mode. ⌘↵ to run</div>
+                <div class="run" id="btn-run">
+                  <svg width="11" height="11" fill="currentColor" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
+                  Run Orchestrator
+                </div>
+                <div class="bc"><span style="font-size:9px">▶</span> Broadcast to all panels in scope</div>
+              </div>
+              <div class="term" id="term" style="display:none"></div>
+            </div>
+
+            <div class="card rt">
+              <div class="rhd">
+                <span class="pn" id="rpn">jerico</span>
+                <span class="bg"><span class="on">Agents <b id="agcount">1</b></span><span>Changes</span></span>
+              </div>
+              <div class="search"><span>Search agents… (⌘K)</span></div>
+              <div class="chips" id="chips"></div>
+              <div class="list">
+                <div class="mach"><i></i><span>mbp-14</span></div>
+
+                <div class="empty" id="empty">
+                  <p>No workers yet. Spawn one to get started.</p>
+                  <button class="btn-p" tabindex="-1">Spawn worker</button>
+                </div>
+
+                <!-- the orchestrator is a panel too, and it is NOT in the group:
+                     it dispatches to the group, it is not a member of it -->
+                <div id="orow" style="display:none">
+                  <div class="wrow"><span class="dot run"></span><span class="nm">Claude Code #2 · Sonnet <span style="color:var(--o-faint)">· orchestrator</span></span></div>
+                </div>
+
+                <!-- a group that was made BEFORE this scene: jerico's column is
+                     not empty when the switch lands on it, the way the log below
+                     is not empty. Its colour is not the default — someone picked
+                     pink out of TEAM_PRESET_COLORS when they made it, which is
+                     exactly how a group you made earlier reads next to the one
+                     being made now. The same four CLI types as the review group,
+                     all idle here: four planner panels with nothing running light
+                     no dot on the tile. -->
+                <div id="grp0" style="display:none">
+                  <div class="ghdr">
+                    <span class="chev" id="gchev0">▾</span>
+                    <span class="sw" style="background:#ec4899"></span>
+                    <span class="gn">planner</span>
+                    <span class="cnt"><span>4</span></span>
+                  </div>
+                  <div id="grows0" style="overflow:hidden">
+                    <div class="wrow ingrp"><span class="tree">├─</span><span class="dot"></span><span class="nm">Claude Code #1 · Sonnet <span style="color:var(--o-faint)">· planner</span></span></div>
+                    <div class="wrow ingrp"><span class="tree">├─</span><span class="dot"></span><span class="nm">Codex CLI #1 · GPT-5.4 <span style="color:var(--o-faint)">· planner</span></span></div>
+                    <div class="wrow ingrp"><span class="tree">├─</span><span class="dot"></span><span class="nm">Kimi Code #1 <span style="color:var(--o-faint)">· planner</span></span></div>
+                    <div class="wrow ingrp"><span class="tree">└─</span><span class="dot"></span><span class="nm">Antigravity #1 <span style="color:var(--o-faint)">· planner</span></span></div>
+                  </div>
+                </div>
+
+                <div id="grp" style="display:none">
+                  <div class="ghdr">
+                    <span class="chev">▾</span>
+                    <span class="sw"></span>
+                    <span class="gn">review</span>
+                    <span class="cnt" id="gcnt"><span>0</span></span>
+                  </div>
+                  <div id="grows"></div>
+                </div>
+
+                <p class="flash" id="flash" style="display:none">Group "review" created</p>
+              </div>
+              <div class="views">Views</div>
+              <div class="ofoot">
+                <div style="position:relative;flex:1;min-width:0;display:flex" id="agentslot">
+                  <button class="gbtn" id="btn-agent"><span>＋</span> Agent</button>
+                </div>
+                <div style="position:relative;flex:1;min-width:0;display:flex" id="groupslot">
+                  <button class="gbtn" id="btn-group">Group <span class="cv">▲</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="lit"></div>
+    <div id="scrim"></div>
+    <div id="bleed"></div>
+    <canvas id="cv" width="1280" height="800"></canvas>
+    <canvas id="curs" width="1280" height="800" aria-hidden="true"></canvas>
+
+    <!-- Skip is FIRST in the DOM and therefore the first tab stop, while `order`
+         keeps it drawn on the right. Someone arriving here on a keyboard or a
+         screen reader should reach the way out before anything else — the
+         announced line says one is there, and the first Tab must land on it. -->
+    <div class="hud">
+      <button type="button" id="skip">Skip</button>
+      <button type="button" id="mute">♪ sound on</button>
+      <span class="sp"></span>
+    </div>
+
+    <div class="gate" id="gate">
+      <div class="in">
+        <button type="button" class="btn" id="play">Play</button>
+        <p>The score is synthesised in the page, so it cannot drift from the picture. Browsers need a click before any audio.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrub">
+    <input type="range" id="range" min="0" max="3640" value="0" aria-label="Scrub the timeline" />
+    <span class="t" id="tlabel">0.00 / 39.1s</span>
+    <button type="button" class="btn" id="replay" style="padding:8px 14px">Replay</button>
+  </div>
+
+  <div class="beats">
+    <div><span class="tt">0.0 – 1.4</span><span class="nm">The room dims</span><span class="ds">The wash comes up over the browser exactly as it does over the desktop in 04, and behind it the project page is on <b>Actions → Events</b> — yesterday's log, four rows of it, which is what the last beat comes back to.</span></div>
+    <div><span class="tt">1.4 – 1.6</span><span class="nm">The sheet rises</span><span class="ds">The orchestrator is not a column, it is a full-height sheet from the bottom over a dismiss backdrop, in the component's own <code>duration-200 ease-out</code>. Three columns arrive with it: the project rail, the centre, the register.</span></div>
+    <div><span class="tt">2.8 – 6.2</span><span class="nm">The project you meant</span><span class="ds">The sheet does <b>not</b> open on the page's project: <code>loadTabs</code> restores the tab that was active when it was last closed, so the first frame is <b>orca</b> — with jerico's page underneath it. One press on a tile switches, and it is not a filter: the tile takes the accent ring and the project's own glow, the name changes in three places, and the register drops orca's running worker for jerico's own column — which is <b>not empty</b>: a <b>planner</b> group made before this scene, pink where the default is indigo, with four idle members in it, the same four CLI types the review group will use later, because <em>tab scope is authoritative</em>. The tooltip is where the name lives — the tile is two letters. And orca keeps its green dot: <code>projectHasRunning</code> counts panels, not attention, so a worker you walked away from is still working.</span></div>
+    <div><span class="tt">6.2 – 9.2</span><span class="nm">Start it</span><span class="ds"><b>The user cannot spawn an orchestrator</b> — <code>USER_ASSIGNABLE_ROLES</code> excludes the role. What starts it is <b>Run Orchestrator</b> with the spec left blank, which is what the field itself offers: <em>Leave blank for interactive mode.</em> Its row appears carrying <code>· orchestrator</code>, and the centre stops being a form and becomes its terminal — and the terminal is not empty: <code>[BRIDGE SESSION CONTEXT]</code> is injected when the session opens, so it lands here, with the session, not eight seconds later with the first call.</span></div>
+    <div><span class="tt">9.2 – 12.6</span><span class="nm">A group you can name</span><span class="ds"><b>Group ▸ New group</b>, and <b>review</b> is typed into the real field — with no click into it first, because the component autofocuses it. The header arrives in indigo <code>#6366f1</code> — <code>TEAM_DEFAULT_COLOR</code>, what the route applies when the panel sends no colour — with the created flash under it, born below the planner group that was already there. <b>It opens with nothing in it</b>, which is the honest state of a group that has just been made.</span></div>
+    <div><span class="tt">12.6 – 20.6</span><span class="nm">And your tools in it</span><span class="ds"><b>＋ Agent → Claude Code → Spawn</b> — and then the same flow three more times, compressed: <b>Codex CLI</b>, <b>Kimi Code</b>, <b>Antigravity</b>. The menu lists what this machine actually has and says so itself — <em>Only locally-installed CLIs are listed</em> — and every row lands <b>inside</b> the group under a <b>└─</b>, named as the product names them: <code>workerDisplayName</code>, so <code>Claude Code #3</code> follows the planner's #1 and the orchestrator's #2. The orchestrator's own row stays outside it: it dispatches to the group, it is not a member of it.</span></div>
+    <div><span class="tt">20.6 – 24.8</span><span class="nm">It reads yesterday</span><span class="ds">§3.0's first actions, in the order the prompt gives them and in parallel: <code>bridge_get_blueprint</code>, <code>bridge_get_project_memory</code>, <code>bridge_get_project_events({ limit: 10 })</code>. That these land after the group exists is not a contradiction — the panel spawns, the TUI takes a moment, and the register is a different surface, so a group can be named while the agent comes up.</span></div>
+    <div><span class="tt">24.8 – 30.2</span><span class="nm">Some of it is a rule</span><span class="ds">Memory returns <b>4 guardrails</b> and <b>advisory.unresolved: 1</b> — the tool's own field, for events it could not place against this checkout, which it says to <em>verify before relying on</em>. Then the orchestrator writes, in its own voice: where yesterday stopped, the two decisions that still bind it, what it will do about the unresolved one, and today's plan.</span></div>
+    <div><span class="tt">30.2 – 36.8</span><span class="nm">The rules travel</span><span class="ds">Nothing left to staff — the user put four CLIs in the group, which is §3.1's <em>diverse models</em> already satisfied — so it briefs them: one <code>bridge_dispatch_brief</code> per panel, four times. A press on a worker row opens its terminal as an overlay <b>inside the sheet</b>, and what landed there is drawn from source: the <code>⟦bridge:inject … from=orchestrator⟧</code> envelope wrapping <code>&lt;jerico_server_owned_guardrails&gt;</code>. <b>The orchestrator did not put them there.</b></span></div>
+    <div><span class="tt">36.8 – 41.2</span><span class="nm">And it writes back</span><span class="ds"><code>bridge_record_event</code> with <code>permanent: true</code>. The sheet goes down on its own <b>ChevronDown</b> and underneath is the log it read at the start, with the new row at the top — one row below it drawn at 50% behind <b>⎇ feat/preview-proxy</b>, a memory from another branch, which is what makes the new one's plain appearance mean something.</span></div>
+    <div><span class="tt">41.2 – 43.8</span><span class="nm">The browser returns</span><span class="ds">The wash lifts to exactly zero on one low note. Scene seconds run at 1.12, so the whole sequence is <b>39.1 s</b> of real time.</span></div>
+  </div>
+
+  <div class="annot">
+    <section>
+      <h3>The rule about rules</h3>
+      <p>Provenance, not relevance, is what makes a memory binding. The prompt states it twice and the
+      second time as a correction: <b><code>applicability</code> (branch-relevance) is never a trust
+      label</b> — a workspace member's event can read <em>applicable</em> while carrying no
+      server-trusted provenance. So the orchestrator may cite an event as evidence in a brief's body,
+      and may not hand it the authority of a guardrail. A guardrail qualifies on <code>permanent</code>
+      + effective scope <code>universal</code> + <code>audience: workspace</code> + not archived + the
+      <code>__jerico_trusted_guardrail</code> tag — and that tag <b>throws</b>
+      <code>event_tags_reserved</code> when it arrives through the request path
+      (<code>events/pipeline.ts:360</code>). Neither the user nor the orchestrator can promote its own
+      note into a rule; only the server puts that block into a brief.</p>
+      <p>Carried from the source rather than glossed: the outer wrapper <em>"is not yet consumed by any
+      worker prompt and therefore is not an authentication boundary today"</em>. The scene must not
+      imply security work that is not being done yet.</p>
+    </section>
+    <section>
+      <h3>Why these were one video and not two</h3>
+      <p>Split, each half had a hole. The creation scene <b>made a group and never sent it
+      anything</b>, so the group was a label; the memory scene <b>dispatched to workers that arrived
+      from nowhere</b>, so the dispatch had no subject. Merged, the group is the thing being briefed
+      and the worker is one you watched arrive. Nothing was added to make that work — the two halves
+      were already about the same object.</p>
+    </section>
+    <section>
+      <h3>The scene opens on the wrong project, and that is the product</h3>
+      <p>The sheet does not open on the page you are standing on. <code>loadTabs</code> reads
+      <code>jerico_orch_tabs_&lt;wsId&gt;</code> and restores the tab that was <b>active when it was
+      last closed</b>; the URL's project opens a tab of its own only when none are open at all. So
+      the honest first frame is somewhere else — <b>orca</b> — over jerico's page, and the first
+      thing the scene does is switch.</p>
+      <p>Switching is not filtering. Each tab is <b>a genuinely separate orchestrator</b>: its own
+      panel, its own runs, its own history, which the component says in its own words on the phone
+      landing — <em>Each project gets its own isolated orchestrator. Agents and instructions never
+      leak between projects.</em> That is why the register does not lose a row when the tile is
+      pressed, it loses a <em>column</em>: tab scope is authoritative. And jerico's column is not
+      empty — the <b>planner</b> group was made before this scene opened, four idle members in it, the
+      way the event log on the page behind already said: this project has a history. What jerico does
+      not have yet is anything <em>running</em>, which is why the tile lights no dot until the next
+      beat starts something.</p>
+      <p>Three details are the component's and not the film's. The <b>tooltip</b>, because a tile is
+      two letters and the name has to live somewhere — raised by <code>mouseenter</code> and by
+      <code>focus</code>, which is why it belongs in a scene whose vocabulary is focus. The active
+      tile's <b>accent ring and its own colour as a glow</b>, drawn from
+      <code>0 0 0 2px var(--t-accent), 0 0 13px -1px &lt;tileColor&gt;</code> rather than invented.
+      And the <b>dot on the project you left</b>: <code>projectHasRunning</code> counts panels, not
+      attention, so orca's worker is still working — green for a worker, amber for an orchestrator
+      with nothing under it yet, which is the precedence the component applies and the pair jerico
+      itself shows in turn.</p>
+    </section>
+    <section>
+      <h3>The dispatch cannot go through the group, and the scene says so</h3>
+      <p>The obvious move is <code>bridge_dispatch_to_group</code>, and it is the wrong tool for this
+      beat. It is a PTY broadcast — <em>send a text message or command to every agent in a group</em>
+      — it attaches <b>no guardrails</b>, and it <b>rejects</b> text containing a reserved guardrail
+      provenance marker. What carries the rules is <code>bridge_dispatch_brief</code>, which
+      auto-includes the server-trusted durable guardrails and <b>fails closed if it cannot read
+      them</b> — and that is per panel. So the group says who is <em>together</em>, not who is
+      dispatched at once, and the scene briefs each member. Drawing a group broadcast that carried
+      rules would be showing something the product does not do.</p>
+    </section>
+    <section>
+      <h3>The group is a team before the orchestrator touches it</h3>
+      <p>The user makes the group and puts four workers in it — Claude Code, Codex CLI, Kimi Code,
+      Antigravity, the four CLIs this machine has installed. That is §3.1's <b>diverse models</b>
+      satisfied before the orchestrator has read anything, so when the prose says "four reviewers,
+      disagree in the open" the picture has already made it true and the dispatch beat has nothing
+      left to spawn — only briefs to send, one <code>bridge_dispatch_brief</code> per panel, because
+      the brief is per panel and the group says who is <em>together</em>, not who is dispatched at
+      once. <code>bridge_spawn_worker</code> remains the orchestrator's own tool for when a team is
+      short; this team is not.</p>
+    </section>
+    <section>
+      <h3>Memory is scoped to where you stand</h3>
+      <p><code>bridge_get_project_memory</code> is not a second store. It is the event log filtered:
+      soft-archived items out, <b>events recorded on a different git branch than your checkout
+      out</b>, and the ones it could not resolve kept but counted in <code>advisory.unresolved</code>.
+      Every event carries <code>branchRef</code>, <code>commitSha</code> and <code>gitDirty</code>,
+      which is what makes that filter possible at all.</p>
+    </section>
+    <section>
+      <h3>What is quoted and what is a worked example</h3>
+      <p><b>Quoted:</b> the three startup calls and their order, the tool names, the guardrail rule,
+      <code>advisory.unresolved</code>, the event types (<code>decision, discovery, blocker,
+      phase_complete, note, warning</code> — <code>bridge_record_event</code>'s own list), the role
+      palette, the branch badge, and the rail — tile geometry, ring, glow, tooltip offset, dot
+      precedence and the localStorage tab restore. <b>A worked example:</b> the transcript's wording,
+      the second project's name <b>orca</b>, the planner group and its pink — a group made earlier,
+      recoloured out of <code>TEAM_PRESET_COLORS</code>, is a state the product holds, not a claim
+      about it — the counts,
+      the row summaries, and yesterday's story. <b>Partly verified since:</b> the
+      <code>⏺</code> glyph is not decoration invented for this drawing — <code>output-tap.ts</code>
+      strips it by name as Claude's TUI decoration when hunting sentinels
+      (<code>:1939</code>, <code>:2457</code>), and the completion-push corpus keys a case on it
+      alongside qwen's <code>✦</code>. The <code>⏺ Tool(args)</code> over a two-space
+      <code>⎿ result</code> shape is already how the web console's orchestrator overlay
+      draws orchestrator output, so this sheet follows an existing in-repo drawing rather than
+      inventing a second one. <b>Still not claimed:</b> the wording of the result lines, and
+      whether a live session wraps or spaces them exactly this way.</p>
+    </section>
+    <section>
+      <h3>Why the log, and not the run history</h3>
+      <p>They are different things and the tool says so: <em>events are separate from run history —
+      they persist across runs and are queryable by role/type/tag</em>. A run ends; a decision does
+      not. That is the whole reason this scene can open on <em>yesterday</em>.</p>
+    </section>
+    <section>
+      <h3>The minimize is the real control</h3>
+      <p>The sheet goes down on the <b>ChevronDown</b> in its own header — the control that exists,
+      doing what it does. No new affordance was drawn for the reveal, and none should be: a tour
+      that invents a gesture teaches a gesture the product does not have.</p>
+    </section>
+    <section>
+      <h3>Every way out</h3>
+      <p>The film's discipline, because the failure is the same one — a piece that covers the screen
+      and cannot be dismissed. <b>Skip</b> is present throughout and is never the primary action;
+      <b>Escape</b> ends it; the window dying ends it; a timeout ends it. They do not share a failure:
+      the film learned that the hard way when two of its three "independent" exits turned out to be
+      one, because both crossed the same preload bridge. <b>Nothing here may stand between the user
+      and the app they just opened.</b></p>
+    </section>
+    <section>
+      <h3>Reduced motion</h3>
+      <p>Not a shorter cut and not a still. It <b>holds each beat where that beat has settled</b> and
+      then plays the tail, where the only thing moving is the wash lifting. Nothing slides, nothing
+      types, and the pointer does not appear at all — a pointer is motion whose entire purpose is to
+      be followed. The film recorded the reasoning when it stopped cutting dead on a held frame: the
+      accommodation removes the motion, not the ending.</p>
+    </section>
+    <section>
+      <h3>The sequence is movable, and moving it changes what it says</h3>
+      <p>Each beat is a <b>segment with its own clock</b>: everything inside it is written against
+      <code>AT.&lt;key&gt;</code>, and the absolute starts are summed from one array. Reordering the
+      sequence is reordering that array — the durations, the score's cues, the pointer's waypoints
+      and the wash all follow, because none of them holds a number of its own. Verified by actually
+      swapping two of them: no errors, the total unchanged, every landmark where the arithmetic said
+      it would be.</p>
+      <p>Two things that follow from it, and they are not the same thing. <b>Reordering is not
+      free of meaning</b> — put the group before the panel and the header opens with nothing in it,
+      so the beat where a worker sits ungrouped and then joins simply does not happen. And
+      <b>not every order is available</b>: choosing the project has to come first or every beat after
+      it happens in a project nobody chose, a brief cannot cite rules that have not been read yet,
+      and writing back is the last thing that happens. Movable parts, not a free permutation.</p>
+    </section>
+    <section>
+      <h3>Open</h3>
+      <p><s>Three beats out of five are a terminal printing text.</s> <b>Answered in rev B</b> by the
+      fix this note itself named: the rule now arrives in a worker's brief, on the worker's own
+      overlay, so the scene runs across three surfaces instead of one. What remains open is smaller
+      and real — the transcript's <em>wording</em> is still a worked example, and the printed shape of
+      a Claude Code tool result is still unverified against a live session.</p>
+    </section>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d')
+  var cursCv = document.getElementById('curs'), cursCtx = cursCv.getContext('2d')
+  var scrimEl = document.getElementById('scrim'), bleedEl = document.getElementById('bleed')
+  var gate = document.getElementById('gate'), playBtn = document.getElementById('play')
+  var skipBtn = document.getElementById('skip'), muteBtn = document.getElementById('mute')
+  var replayBtn = document.getElementById('replay'), range = document.getElementById('range')
+  var tlabel = document.getElementById('tlabel')
+  var W = 1280, H = 800
+
+  var RISE = 1.4          // the sheet comes up
+  var RISE_FOR = 0.20     // the component's own duration-200
+
+  /* ── the sequence, as movable parts ───────────────────────────────────────
+     08 and 09 were two videos: one made a group and never sent it anything, the
+     other dispatched to workers that arrived from nowhere. Merged, the group has
+     a purpose and the worker has an origin — everything after the third segment
+     happens to the group you just watched being built.
+
+     Order note worth stating, because it looks like a contradiction and is not:
+     §3.0 makes the three context calls the orchestrator's FIRST actions, and here
+     they land after the group exists. Both are true of a real session — the panel
+     spawns, the TUI takes a moment, and the register is a different surface, so a
+     group can be named while the agent is still coming up. What must not be
+     reordered is the story: reading, then the rules, then the dispatch, then the
+     write-back. */
+  var SEQ = [
+    { key: 'project',   len: 3.4 },   // the rail: the tab it reopened on, then jerico
+    { key: 'start',     len: 3.0 },   // Run Orchestrator, spec left blank
+    { key: 'group',     len: 3.4 },   // Group -> New group -> typed -> the header
+    { key: 'staff',     len: 8.0 },   // + Agent -> a CLI -> Spawn, four times, into the group
+    { key: 'read',      len: 4.2 },   // the three parallel calls, and what came back
+    { key: 'rules',     len: 5.4 },   // memory, and the orchestrator writing
+    { key: 'dispatch',  len: 6.6 },   // the brief, and a rule arriving at the worker
+    { key: 'writeback', len: 4.4 }    // record_event, the sheet down, the log
+  ]
+  var AT = {}
+  var END = (function () {
+    var t = RISE + RISE_FOR + 1.2
+    for (var i = 0; i < SEQ.length; i++) { AT[SEQ[i].key] = t; t += SEQ[i].len }
+    return t
+  })()
+  var DUR = END + 2.6
+
+  /* ── pace ──────────────────────────────────────────────────────────────────
+     Authored in scene seconds and played a little faster than that: every number
+     in this file stays as written and reviewed, and only the clock that reads them
+     runs quick. One place, so the picture and the score cannot disagree —
+     `authored()` maps real time to scene time, `real()` is its inverse, and the
+     score is scheduled through it.
+
+     Two reports shaped this number: too slow at 1.0, then too fast to follow at
+     1.40. What dragged was the dead time between beats, not the reading, so the
+     pace is gentle and the slack was cut from the segments instead. */
+  var RATE = 1.12
+  function authored(tr) { return tr * RATE }
+  function real(ta) { return ta / RATE }
+  var DUR_REAL = real(DUR)
+  /* ── each beat is separately playable, and the order is not owned here ─────
+     `state(t)` is a pure function of t: nothing accumulates, nothing is caught up.
+     That is what makes a single beat playable on its own — start the clock inside
+     its window and the picture is already correct, with no fast-forward and no
+     replay of what came before.
+
+     So the sheet exposes its own beat list and accepts `?beat=<key>`, and the
+     runner decides what plays and in what order. A scene that owned its order
+     could not be reordered without editing it; this one can be reordered by
+     whoever is playing it. */
+  /* the wash coming up and the sheet rising, before the first segment */
+  var LEAD_BEATS = [{ key: 'open', toReal: real(AT[SEQ[0].key]) }]
+  /* ── the beat list ────────────────────────────────────────────────────────
+     The windows TILE: each beat ends where the next begins, so a sequence of them
+     is the scene itself with nothing lost and nothing shown twice.
+
+     The first version gave every beat a 0.45s lead-in and a 0.55s settle, which is
+     right for a beat played alone and wrong for a sequence — measured, it left a
+     1.04s HOLE between the film's end and the next beat's lead-in, so the runner
+     cut the film at 13.85, dropped the moment the card opens out of the mark, and
+     reloaded the page. The lead-in belongs to solo playback and is applied there
+     (`?beat=`), not to the list. */
+  window.JERICO_SCENE = (function () {
+    var bs = [], prev = 0
+    LEAD_BEATS.forEach(function (lb) {
+      bs.push({ key: lb.key, fromReal: prev, toReal: lb.toReal })
+      prev = lb.toReal
+    })
+    SEQ.forEach(function (s) {
+      var end = real(AT[s.key] + s.len)
+      bs.push({ key: s.key, fromReal: prev, toReal: end })
+      prev = end
+    })
+    bs[bs.length - 1].toReal = DUR_REAL          // the closing wash rides the last beat
+    bs.forEach(function (b) { b.len = +(b.toReal - b.fromReal).toFixed(2) })
+    return { file: location.pathname.split('/').pop(), rate: RATE, durReal: DUR_REAL, beats: bs }
+  })()
+
+  var ONE = (function () {
+    var m = /[?&]beat=([a-z0-9_-]+)/i.exec(location.search)
+    if (!m) return null
+    for (var i = 0; i < window.JERICO_SCENE.beats.length; i++) {
+      if (window.JERICO_SCENE.beats[i].key === m[1]) return window.JERICO_SCENE.beats[i]
+    }
+    return null
+  })()
+  /* `?from=&to=` plays a SPAN of real seconds. It exists because beat windows
+     overlap by design — each one starts 0.45 before its segment and ends 0.55
+     after, which a beat needs when it plays alone and which plays the same second
+     twice when beats play back to back. A runner asking for consecutive beats asks
+     for one span instead. */
+  var SPAN = (function () {
+    var a = /[?&]from=([\d.]+)/.exec(location.search)
+    var b = /[?&]to=([\d.]+)/.exec(location.search)
+    if (!a && !b) return null
+    return { from: a ? parseFloat(a[1]) : 0, to: b ? parseFloat(b[1]) : DUR_REAL }
+  })()
+  /* a beat played alone gets a short run-up; a beat played in sequence must not */
+  var PLAY_FROM = SPAN ? Math.max(SPAN.from, 0) : (ONE ? Math.max(ONE.fromReal - 0.45, 0) : 0)
+  var PLAY_TO = Math.min(SPAN ? SPAN.to : (ONE ? ONE.toReal : DUR_REAL), DUR_REAL)
+
+
+  /* the orchestrator is not spawned, it is STARTED: USER_ASSIGNABLE_ROLES excludes
+     the role, and `handleRunSpec` calls `ensureOrchPanel` then stops on an empty
+     spec — "Empty spec -> interactive mode: panel is spawned above, nothing more
+     to do", which is what the field itself offers. */
+  /* ── the rail, and why the scene starts on the wrong project ──────────────
+     The sheet does not open on the page's project: `loadTabs` reads
+     `jerico_orch_tabs_<wsId>` out of localStorage and restores the tab that was
+     ACTIVE when it was last closed, and the URL only opens a tab of its own when
+     none are open at all. So the honest first frame is the tab you left — here
+     `orca` — with jerico's project page underneath it.
+
+     Switching is one press on a tile, and it is not a filter. Each tab is a
+     genuinely separate orchestrator with its own panel, its own runs and its own
+     history, which the component says in its own words on the phone landing:
+     "Each project gets its own isolated orchestrator. Agents and instructions
+     never leak between projects." That is why this beat comes FIRST — everything
+     the rest of the scene builds belongs to the project chosen here. */
+  var OTHER = { name: 'orca', tile: '#tl-o' }
+  var P = { focus: AT.project + 0.60,   // the ring lands on the tile, and the name with it
+            press: AT.project + 1.50,   // the switch
+            settle: AT.project + 1.65 } // scale, ring and glow have arrived (transition-all, 150ms)
+
+  var RUN_PRESS = AT.start + 1.05
+  var ORCH_AT = AT.start + 1.35
+
+  /* the worker overlay lives inside `dispatch`, so it travels with it */
+  var WOV_IN = AT.dispatch + 2.9, WOV_OUT = AT.dispatch + 6.2
+
+  /* ── reduced motion ───────────────────────────────────────────────────────
+     07 inherits this from the film and these two had nothing, which is a real
+     gap rather than a missing nicety: everything here is choreography, and
+     choreography is exactly what the preference asks to be spared.
+
+     It is not a shorter version and not a still. It holds each beat at the
+     moment that beat has SETTLED — the row landed, the group named, the block
+     delivered, the row in the log — and then plays the tail, where the only
+     thing moving is the wash lifting. Nothing slides, nothing types, and the
+     pointer does not appear at all; a pointer is motion whose whole purpose is
+     to be followed.
+
+     Same reasoning the film recorded when it stopped cutting dead on a held
+     frame: the accommodation is to remove motion, not to remove the ending. */
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  /* A FUNCTION, not an array literal. As a literal it was evaluated where it sat —
+     above the constants it refers to — and threw on load: "Cannot read properties
+     of undefined (reading 'born')". The page still drew, because the throw happened
+     before `frame(0)`, which is exactly the kind of failure that looks like a
+     styling problem. */
+  function reduceHolds() {
+    return [P.settle + 0.5, ORCH_AT + 0.6, G.born + 0.5, SPAWNS[SPAWNS.length - 1].at + 0.8, AT.rules + 5.0, WOV_IN + 2.6, FRESH_AT + 0.6]
+  }
+  var REDUCE_HOLD_MS = 2000
+
+  function clamp(v,a,b){ return v<a?a:v>b?b:v }
+  function seg(t,a,b){ return clamp((t-a)/(b-a),0,1) }
+  function outCubic(p){ return 1-Math.pow(1-p,3) }
+  function inOutCubic(p){ return p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2 }
+  function lerp(a,b,p){ return a+(b-a)*p }
+
+
+  /* present mode: the same stage, unbounded. `?present` or `#present`. */
+  if (/[?&#]present/.test(location.search + location.hash)) {
+    document.body.classList.add('present')
+  }
+  if (/[?&]app=1/.test(location.search)) document.body.classList.add('app')
+
+  var MARK = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">' +
+    '<path d="M3 12 H7"/><path d="M7 12 C 10 12, 10 5, 13 5"/>' +
+    '<path d="M7 12 C 10 12, 10 12, 13 12"/><path d="M7 12 C 10 12, 10 19, 13 19"/></g>' +
+    '<g fill="currentColor"><circle cx="3" cy="12" r="1.9"/><circle cx="15" cy="5" r="1.9"/>' +
+    '<circle cx="15" cy="12" r="1.9"/><circle cx="15" cy="19" r="1.9"/></g></svg>'
+  document.getElementById('trayglyph').innerHTML = MARK
+  document.getElementById('favglyph').innerHTML = MARK.replace('width="14" height="14"','width="11" height="11"')
+
+  var browEl = document.querySelector('.brow')
+
+  /* ── the arrival: it comes up from the bottom, and it comes up in pieces ───
+     The sixth arrival, and the first that does what the component does. Five were
+     tried before it (the notes below record them) and the fifth — a mosaic paving
+     the surface tile by tile, chosen because it moved nothing — was rejected on
+     sight for the reason that matters most: watched in sequence it reads as the
+     screen going dark and the orchestrator then simply BEING there. Two faults in
+     one seam, and the darkness turned out to be the runner's; this is the other
+     half.
+
+     What the product actually does is a sheet from the bottom edge over a dismiss
+     backdrop, `duration-200 ease-out`. So the container travels from the bottom —
+     the direction is not a licence, it is the component — and the earlier note's
+     objection stands and is answered rather than ignored: a 1400pt rectangle
+     moving as one slab is a single event however it is eased. It does not move as
+     one. The header and the three columns each carry their own delay and their own
+     short travel, so the sheet arrives as FOUR arrivals in the same direction, and
+     the eye has something to follow for a second and a half instead of a fifth of
+     one.
+
+     Said plainly, because the sheet it replaced said it and it is still true: the
+     STAGGER is the film's, not the product's. The real sheet slides up with its
+     content already laid out, and rendering is not something you can watch. What is
+     the product's is the direction, the dismiss backdrop it travels over and the
+     easing; what is borrowed is the second and a half. Same licence the film takes
+     drawing the mark with a travelling light, and acceptable on the same terms —
+     while it claims nothing false about behaviour.
+
+     The order is the reading order of what follows: the header, then the rail you
+     choose a project in, then the centre you start a run in, then the register the
+     work lands in. Each piece is 0.34 long against a container that takes 0.40 —
+     stretched from the component's 200ms because eight frames of film is not an
+     arrival — and every one of them eases out, which is what Svelte and Tailwind
+     both mean by ease-out. */
+  var RISE_FROM = 0.15, RISE_TO = 0.55
+  var PIECES = [
+    { sel: '.shd',       at: 0.32, lift: 26 },
+    { sel: '.card.rail', at: 0.58, lift: 34 },
+    { sel: '.card.mid',  at: 0.84, lift: 34 },
+    { sel: '.card.rt',   at: 1.10, lift: 34 }
+  ].map(function (p) {
+    p.el = document.querySelector(p.sel)
+    return p.el ? p : null
+  }).filter(Boolean)
+  var PIECE_FOR = 0.34
+  var el = {
+    sheet: document.getElementById('sheet'), bd: document.getElementById('bd'),
+    term: document.getElementById('term'), rows: document.getElementById('rows'),
+    specform: document.getElementById('specform'), empty: document.getElementById('empty'),
+    orow: document.getElementById('orow'), grp: document.getElementById('grp'),
+    grp0: document.getElementById('grp0'), grows0: document.getElementById('grows0'),
+    gchev0: document.getElementById('gchev0'),
+    grows: document.getElementById('grows'), gcnt: document.getElementById('gcnt'),
+    flash: document.getElementById('flash'), agentslot: document.getElementById('agentslot'),
+    groupslot: document.getElementById('groupslot'), btnAgent: document.getElementById('btn-agent'),
+    btnGroup: document.getElementById('btn-group'),
+    chips: document.getElementById('chips'), agcount: document.getElementById('agcount'),
+    evlist: document.getElementById('evlist'), prog: document.getElementById('prog'),
+    wov: document.getElementById('wov'), wovbd: document.getElementById('wovbd'),
+    wterm: document.getElementById('wterm'),
+    tlJ: document.getElementById('tl-j'), tlO: document.getElementById('tl-o'),
+    dotJ: document.getElementById('dot-j'), rtip: document.getElementById('rtip'),
+    sheetEl: document.getElementById('sheet'),
+    hchip: document.getElementById('hchip'), mpill: document.getElementById('mpill'),
+    rpn: document.getElementById('rpn')
+  }
+
+  /* ── the transcript ──────────────────────────────────────────────────────
+     Tool CALLS pop whole, prose STREAMS — which is how a terminal behaves and
+     is cheaper than typing fourteen lines. The calls and their order are §3.0's;
+     the wording of the results is a worked example, and the exact shape of a
+     Claude Code tool result is not claimed. */
+  var TERM = [
+    /* the session context lands WITH the session, not with the first call: it is
+       injected when the panel spawns, and a terminal that opens and shows nothing
+       for eight seconds is not the product — it is the sheet forgetting to draw.
+       It sits alone under a caret while the group and the spawn happen in the
+       rail, which is the honest picture of "the agent is still coming up". */
+    { at: ORCH_AT + 0.80, c: 'ctx',  s: '[BRIDGE SESSION CONTEXT] project=8f2c1a04 · panel=a91e77' },
+    { at: AT.read + 0.30, c: 'call', s: '⏺ bridge_get_blueprint()' },
+    { at: AT.read + 0.54, c: 'call', s: '⏺ bridge_get_project_memory()' },
+    { at: AT.read + 0.78, c: 'call', s: '⏺ bridge_get_project_events({ limit: 10 })' },
+    { at: AT.read + 1.90, c: 'res',  s: '  ⎿ blueprint · 6 sections' },
+    { at: AT.read + 2.20, c: 'res',  s: '  ⎿ 10 events · 2026-08-14 18:42 → 09:12' },
+    { at: AT.rules + 0.40, c: 'res',  s: '  ⎿ 4 guardrails · advisory.unresolved: 1' },
+
+    /* ── what it says about what it read ─────────────────────────────────
+       The first draft had two lines here — `yesterday · …` and `today · …` —
+       and they read as more log, which is the one thing this beat must not be:
+       the log is above, and the point of the beat is that something UNDERSTOOD
+       it. So the orchestrator writes, in its own voice.
+
+       The second draft went the other way and was too technical: it repeated
+       `advisory.unresolved: 1` and stamped `(decision · permanent)` after each
+       guardrail — field names the two result lines DIRECTLY ABOVE already
+       carry. That is the resolution: the terminal holds two registers, the
+       machine's and the person's, and the prose does not need to re-say what
+       the tool result just said. It tells the story instead.
+
+       Nothing was given up to do it. Every clause still maps to a mechanism:
+         · "read this project's log" — the three §3.0 calls above
+         · "the reviewer sent it back" — a reviewer-role event, todo_failed
+         · "two tasks were waiting behind it" — dependsOn, blocked
+         · "still bind me here" — a guardrail is exactly a permanent event
+           with a trusted tag, and `bind` is what it does
+         · "left on a different branch … not taking it on trust" —
+           `advisory.unresolved`, and the tool's own instruction to verify
+           before relying on it
+         · "four reviewers, disagree in the open, seal the verdict myself" —
+           §3.1 steps 2, 3 and 4, in order
+       The wording is a worked example. The shape of the claim is not. */
+    { at: AT.rules + 1.20, c: 'say',  s: "  I have read this project's log. Yesterday you got #7 working — the token", type: true },
+    { at: AT.rules + 1.50, c: 'say',  s: '  refresh — and the reviewer sent it back at the last step: no way to undo', type: true },
+    { at: AT.rules + 1.80, c: 'say',  s: '  it if it went wrong. Two tasks were waiting behind it, so nothing after', type: true },
+    { at: AT.rules + 2.10, c: 'say',  s: '  #7 ever ran.', type: true },
+    { at: AT.rules + 2.35, c: 'say',  s: '' },
+    { at: AT.rules + 2.50, c: 'say',  s: '  Two decisions this project made before still bind me here: a session', type: true },
+    { at: AT.rules + 2.80, c: 'say',  s: "  belongs to a device, never to an account, and a token's scope is never", type: true },
+    { at: AT.rules + 3.10, c: 'say',  s: '  widened to make a test pass.', type: true },
+    { at: AT.rules + 3.35, c: 'say',  s: '' },
+    { at: AT.rules + 3.50, c: 'say',  s: '  One note was left on a different branch than the one you are standing', type: true },
+    { at: AT.rules + 3.80, c: 'say',  s: '  on. I am not taking that one on trust — I will check it against the code.', type: true },
+    { at: AT.rules + 4.05, c: 'say',  s: '' },
+    { at: AT.rules + 4.20, c: 'say',  s: '  Today: give #7 its rollback path, then unblock the two behind it. I will', type: true },
+    { at: AT.rules + 4.50, c: 'say',  s: '  put the same task to four reviewers, have them disagree in the open,', type: true },
+    { at: AT.rules + 4.80, c: 'say',  s: '  and seal the verdict myself.', type: true },
+    /* The prose above says the same task goes to four reviewers, and §3.1 asks
+       for diverse models rather than split sub-tasks — which the staff beat has
+       already made true: four panels, four different CLIs, put there by the
+       user. So there is nothing left to spawn here; the orchestrator's job in
+       this beat is to BRIEF them, one `bridge_dispatch_brief` per panel,
+       because the brief is per panel and the group only says who is together. */
+    { at: AT.dispatch + 0.55, c: 'call', s: '⏺ bridge_list_agents()' },
+    { at: AT.dispatch + 0.95, c: 'call', s: '⏺ bridge_dispatch_brief(agentId: 7c1e…, taskSuffix: REVIEW_7)' },
+    { at: AT.dispatch + 1.30, c: 'call', s: '⏺ bridge_dispatch_brief(agentId: b402…, taskSuffix: REVIEW_7)' },
+    { at: AT.dispatch + 1.65, c: 'call', s: '⏺ bridge_dispatch_brief(agentId: 9d33…, taskSuffix: REVIEW_7)' },
+    { at: AT.dispatch + 2.00, c: 'call', s: '⏺ bridge_dispatch_brief(agentId: e61f…, taskSuffix: REVIEW_7)' },
+    { at: AT.dispatch + 2.45, c: 'res',  s: '  ⎿ dispatched · 2 durable guardrails attached by the server' },
+    { at: AT.writeback + 0.30, c: 'call', s: "⏺ bridge_record_event({ eventType: 'decision', permanent: true })" },
+    { at: AT.writeback + 1.00, c: 'res',  s: '  ⎿ recorded' }
+  ]
+  var TYPE_FOR = 0.50
+
+  /* ── what arrives at the worker ───────────────────────────────────────────
+     Every line here is read out of source, because this is the beat that has to
+     survive inspection:
+
+       · the envelope is `injection-marker.ts:30` —
+         ⟦bridge:inject <ISO> from=<from> panel=<callerPanel> task=<suffix>⟧
+       · the block inside is `events/guardrails.ts:139` verbatim, outer marker
+         and all: <jerico_server_owned_guardrails source="trusted_durable_project_events">
+       · the two rules are the same two the orchestrator spoke about upstairs —
+         one surface must not contradict another
+       · a guardrail qualifies on `permanent` + effective scope `universal` +
+         `audience: workspace` + not archived + the `__jerico_trusted_guardrail`
+         tag, and that tag THROWS `event_tags_reserved` when it arrives through
+         the request path. Neither the user nor the orchestrator can promote its
+         own note into a rule; only the server puts this block here.
+       · `bridge_dispatch_brief` "fails closed if they cannot be read"
+
+     Honest caveat, and it is in the source's own words: the outer wrapper "is
+     not yet consumed by any worker prompt and therefore is not an
+     authentication boundary today". The scene must not imply it is doing
+     security work it is not yet doing. */
+  /* the worker's own scrollback: it was spawned into the group and briefed once
+     already, so this is the tail of that. Dim, because it is history. */
+  var WSCROLL = [
+    'jerico worker \u00b7 claude \u00b7 group review',
+    '',
+    '\u23FA bridge_get_session_context()',
+    '  \u23BF project=8f2c1a04 \u00b7 panel=7c1e44 \u00b7 group=review',
+    '',
+    '\u23FA bridge_get_role_prompt({ role: "reviewer" })',
+    '  \u23BF 1.8 KB \u00b7 adopted',
+    '',
+    '\u23FA bridge_codegraph_status()',
+    '  \u23BF indexed \u00b7 4,812 symbols \u00b7 resolutionCoverage 0.91',
+    '',
+    '\u23FA bridge_get_my_task()',
+    '  \u23BF no task assigned yet',
+    '',
+    '\u23FA Read(docs/briefs/resume_7_rollback.md)',
+    '  \u23BF file not found \u2014 waiting for a brief',
+    '',
+    'idle \u00b7 awaiting dispatch',
+    ''
+  ]
+  var INJECT = [
+    { at: WOV_IN + 0.25, c: 'env',  s: '⟦bridge:inject 2026-08-15T09:14:02.118Z from=orchestrator panel=a91e77 task=REVIEW_7⟧' },
+    { at: WOV_IN + 0.55, c: 'grd',  s: '<jerico_server_owned_guardrails source="trusted_durable_project_events">' },
+    { at: WOV_IN + 0.80, c: 'grd',  s: '<mandatory_project_guardrails>' },
+    { at: WOV_IN + 1.10, c: 'rule', s: 'sessions are per-device, never per-account' },
+    { at: WOV_IN + 1.40, c: 'rule', s: "never widen a token's scope to unblock a test" },
+    { at: WOV_IN + 1.65, c: 'grd',  s: '</mandatory_project_guardrails>' },
+    { at: WOV_IN + 1.85, c: 'grd',  s: '</jerico_server_owned_guardrails>' },
+    { at: WOV_IN + 1.95, c: 'body', s: '' },
+    { at: WOV_IN + 2.05, c: 'body', s: 'docs/briefs/resume_7_rollback.md — review #7 against the rollback' },
+    { at: WOV_IN + 2.25, c: 'body', s: 'requirement. Report as .md. Evidence class on every claim.' },
+    { at: WOV_IN + 2.45, c: 'env',  s: '⟦/bridge:inject⟧' }
+  ]
+
+  /* the register. The orchestrator is itself a panel and carries its role
+     suffix, exactly as the component renders `{#if wp.role} · {wp.role}`. */
+  /* Four spawns, one flow described once: press + Agent, pick a CLI, press
+     Spawn, the row appears — and because a group exists by now, it appears
+     INSIDE it. The first pass runs at reading pace so the flow can be learned;
+     the next three are the same flow compressed, which is what doing a thing
+     for the second time looks like. The orchestrator's own row is not in the
+     group: it dispatches to the group, it is not a member of it.
+
+     The names are the product's own — `workerDisplayName(agentKey, ordinal,
+     model)`: the existing planner group owns #1 for all four CLI types, the
+     orchestrator is Claude Code #2, so review receives Claude Code #3 and #2 for
+     the other three. `· Sonnet` and `· GPT-5.4` are the two registered
+     defaultModel labels; kimi and agy have no registered default, so their model
+     select shows its own placeholder, `select model`. */
+  var S  = { menu: 0.10, itemAt: 0.62, pickPress: 0.72, row: 0.95, spawnAt: 1.45,
+             spawnPress: 1.58, land: 1.78, run: 2.60 }
+  var S2 = { menu: 0.05, itemAt: 0.28, pickPress: 0.38, row: 0.50, spawnAt: 0.72,
+             spawnPress: 0.80, land: 0.98, run: 1.30 }
+  var SPAWNS = [
+    { key: 'claude', chip: 'Claude Code', model: 'Sonnet',
+      name: 'Claude Code #3 · Sonnet', press: AT.staff + 0.55, s: S },
+    { key: 'codex', chip: 'Codex CLI', model: 'GPT-5.4',
+      name: 'Codex CLI #2 · GPT-5.4', press: AT.staff + 3.55, s: S2 },
+    { key: 'kimi', chip: 'Kimi Code', model: null,
+      name: 'Kimi Code #2', press: AT.staff + 4.95, s: S2 },
+    { key: 'agy', chip: 'Antigravity', model: null,
+      name: 'Antigravity #2', press: AT.staff + 6.35, s: S2 }
+  ]
+  SPAWNS.forEach(function (sp) {
+    sp.menuFrom = sp.press + sp.s.menu
+    sp.menuTo   = sp.press + sp.s.pickPress + 0.10
+    sp.rowFrom  = sp.press + sp.s.row
+    sp.rowTo    = sp.press + sp.s.land
+    sp.at       = sp.press + sp.s.land
+    sp.runAt    = sp.press + sp.s.run
+  })
+  var SPAWN = SPAWNS[0]   // the first pass, where a constant of its own reads better
+
+  /* the group's own moments */
+  var G = { press: AT.group + 0.45, menu: AT.group + 0.60, itemAt: AT.group + 1.15,
+            menuEnd: AT.group + 1.35, form: AT.group + 1.35, typeFrom: AT.group + 1.55,
+            typeFor: 0.70, okAt: AT.group + 2.55, okPress: AT.group + 2.65,
+            born: AT.group + 2.90 }
+  var AGENT_MENU =
+    '<div class="menu" id="m-agent">' +
+      '<div class="it" data-k="claude"><span class="pl">+</span>Claude Code</div>' +
+      '<div class="it" data-k="codex"><span class="pl">+</span>Codex CLI</div>' +
+      '<div class="it" data-k="kimi"><span class="pl">+</span>Kimi Code</div>' +
+      '<div class="it" data-k="agy"><span class="pl">+</span>Antigravity</div>' +
+      '<div class="it" data-k="opencode"><span class="pl">+</span>OpenCode</div>' +
+      '<div class="it" data-k="sh"><span class="pl">+</span>Shell</div>' +
+      '<div class="sep"></div>' +
+      '<div class="note">Only locally-installed CLIs are listed</div>' +
+      '<div class="runner"><p>Runner command</p>' +
+        '<div class="rin"><span>e.g. flutter run</span><b>&#9654;</b></div></div>' +
+    '</div>'
+  var GROUP_MENU =
+    '<div class="menu" id="m-group">' +
+      '<div class="it" data-k="new"><span class="pl">&#9636;</span>New group</div>' +
+      '<div class="it"><span class="pl">&#9637;</span>Schemas&hellip;</div>' +
+    '</div>'
+  var GNAME = 'review'
+
+  /* the register, in the order it fills: the orchestrator alone, then the four
+     the user staffs the group with — all of them the user's, made on camera */
+  var ROWS = [
+    { at: ORCH_AT, name: 'Claude Code #2 · Sonnet', role: 'orchestrator', run: ORCH_AT + 0.5, grouped: false }
+  ]
+  SPAWNS.forEach(function (sp) {
+    ROWS.push({ at: sp.at, name: sp.name, role: 'reviewer', run: sp.runAt, grouped: true })
+  })
+
+  /* the log. One row is muted behind a branch badge, because a memory that does
+     not apply here is what gives the new one's plain appearance any meaning. */
+  var FRESH_AT = AT.writeback + 1.75
+  var EVENTS = [
+    { at: FRESH_AT, role: 'orchestrator', dot: '#fbbf24', fresh: true,
+      s: 'Resume #7 and the two todos it blocked', ago: 'now', pid: '4e1b90c2',
+      tags: ['decision', 'constraint'] },
+    { at: 0, role: 'reviewer', dot: '#4ade80', s: 'Review rejected: #7 has no rollback path', ago: '15h', pid: 'a7710f31' },
+    { at: 0, role: 'developer', dot: '#fb923c', s: '#7 token refresh implemented', ago: '15h', pid: '—' },
+    { at: 0, role: 'system', dot: '#34d399', s: 'Run completed: 6 done, 1 failed', ago: '16h', pid: '—' },
+    { at: 0, role: 'planner', dot: '#fbbf24', s: 'Sessions are per-device, never per-account', ago: '3d',
+      pid: 'c8802aa5', badge: '⎇ feat/preview-proxy', mute: true },
+    /* Older, and there to fill the column rather than to be read: five rows left
+       three fifths of a full-screen frame empty, and a log that thin says the
+       project has no history — which is the opposite of what the scene claims.
+       Every type here is one `bridge_record_event` documents: decision, discovery,
+       blocker, phase_complete, note, warning. */
+    { at: 0, role: 'orchestrator', dot: '#fbbf24', s: 'Plan created with 9 briefs', ago: '16h', pid: '4e1b90c2' },
+    { at: 0, role: 'developer', dot: '#fff',      s: 'Token refresh needs a rollback path', ago: '17h', pid: '—' },
+    { at: 0, role: 'reviewer', dot: '#4ade80',    s: 'Approved with caveat: no test for the 401 path', ago: '18h', pid: 'a7710f31' },
+    { at: 0, role: 'shell', dot: '#fb923c',       s: 'pnpm test — 23/25 pass, 2 fail', ago: '18h', pid: '—' },
+    { at: 0, role: 'system', dot: '#ef4444',      s: 'Run failed: zombie watchdog reaped 1 todo', ago: '19h', pid: '—' },
+    { at: 0, role: 'orchestrator', dot: '#fbbf24', s: 'Never widen a token scope to unblock a test', ago: '2d',
+      pid: '77c1e004' },
+    { at: 0, role: 'planner', dot: '#fff',        s: 'Blueprint updated: auth section', ago: '2d', pid: 'c8802aa5' },
+    { at: 0, role: 'executor', dot: '#fff',       s: 'Codegraph indexed 4,812 symbols', ago: '3d', pid: '—' }
+  ]
+
+
+  /* ── arrivals ─────────────────────────────────────────────────────────────
+     Rows were popping into place, and a row that appears with no arrival is not
+     restraint, it is an unfinished drawing. But the treatment is NOT invented
+     for the film: it is the product's own vocabulary, counted out of the web app —
+     `transition:slide={{ duration: 180 }}` six times, `transition:fly={{ y: 24,
+     duration: 220 }}` three times, and the sheet's own `duration-200 ease-out`.
+     Svelte eases both with cubic-out, so these do too.
+
+     `slide` is a height opening, which is what a row joining a register does.
+     `fly` is a 24px rise, which is what a thing arriving from elsewhere does —
+     the log row, which came from the server.
+
+     Where the product animates NOTHING, neither do these sheets: the ＋ Agent and
+     Group menus are plain `{#if}` blocks in the component and they pop, so they
+     pop here too. A film that smoothed them would be flattering the product
+     rather than describing it. */
+  function slideIn(t, at) {
+    var p = outCubic(clamp((t - at) / 0.18, 0, 1))
+    return 'max-height:' + (p * 34).toFixed(2) + 'px;opacity:' + p.toFixed(3) +
+      ';overflow:hidden;transition:none'
+  }
+  function flyIn(t, at) {
+    var p = outCubic(clamp((t - at) / 0.22, 0, 1))
+    return 'transform:translateY(' + ((1 - p) * 24).toFixed(2) + 'px);opacity:' + p.toFixed(3)
+  }
+
+  /* the glow is the project's own colour, so it needs the colour with an alpha */
+  function hexA(hex, a) {
+    return 'rgba(' + parseInt(hex.substr(1,2),16) + ',' + parseInt(hex.substr(3,2),16) +
+           ',' + parseInt(hex.substr(5,2),16) + ',' + a.toFixed(3) + ')'
+  }
+  /* Both states of a tile in one expression, crossfaded by `p`: the 1.1 scale, the
+     accent ring, the project-coloured glow and the 1px subtle ring of an inactive
+     tile, plus the saturate/brightness dimming the component applies to every tile
+     it is not on. */
+  function tileStyle(color, p) {
+    return 'background:' + color + ';--tc:' + color +
+      ';transform:scale(' + (1 + 0.10 * p).toFixed(4) + ')' +
+      ';z-index:' + (p > 0.5 ? 10 : 1) +
+      ';filter:saturate(' + (0.55 + 0.45 * p).toFixed(3) + ') brightness(' +
+        (0.85 + 0.15 * p).toFixed(3) + ')' +
+      ';box-shadow:0 0 0 1px rgba(255,255,255,' + (0.06 * (1 - p)).toFixed(3) + ')' +
+        ',0 0 0 2px ' + hexA('#d97706', p) + ',0 0 13px -1px ' + hexA(color, p)
+  }
+
+  function state(t) {
+    /* ── the rail: the tab it reopened on, and the press that changes scope ────
+       One boolean drives the whole column set, because in the component one
+       boolean does: `activeTabKey`. The tile geometry crossfades over the
+       component's own `transition-all` 150ms; the NAMES and the register do not
+       crossfade at all — a scope change re-renders those columns, it does not
+       animate a list. */
+    var onJ = t >= P.press
+    var sw = outCubic(seg(t, P.press, P.settle))
+    el.tlJ.setAttribute('style', tileStyle('#6366f1', sw))
+    el.tlO.setAttribute('style', tileStyle('#0ea5e9', 1 - sw))
+    /* jerico has no dot until its own orchestrator is up; orca keeps its amber one
+       the whole way through, which is the point — a panel you left running is
+       still running. */
+    el.dotJ.style.display = t >= ORCH_AT ? '' : 'none'
+    el.dotJ.className = 'rdot' + (t >= SPAWN.runAt ? '' : ' live')
+    var pname = onJ ? 'jerico' : OTHER.name
+    if (el.rpn.textContent !== pname) {
+      el.hchip.textContent = pname; el.mpill.textContent = pname; el.rpn.textContent = pname
+    }
+    /* the tooltip: raised by focus, and it goes when the focus ring does */
+    var tipA = seg(t, P.focus, P.focus + 0.12) * (1 - seg(t, P.press + 0.30, P.press + 0.42))
+    el.rtip.style.opacity = tipA.toFixed(3)
+    if (tipA > 0.01) {
+      /* No k conversion here: the drawn app is real DOM at CSS pixels and it is
+         the CANVAS that is scaled, so a k-corrected offset put the bubble 20.4px
+         from a tile whose component offset is 10. */
+      var tr = el.tlJ.getBoundingClientRect(), sr2 = el.sheetEl.getBoundingClientRect()
+      if (sr2.width) {
+        el.rtip.textContent = 'jerico'
+        /* From the tile's LAYOUT edge, not its painted one: the active tile is
+           scaled 1.1 and a measured `right` would slide the bubble 2px outward as
+           it grew, while the component captures the offset once on hover. */
+        var cx = tr.left + tr.width / 2, cy = tr.top + tr.height / 2
+        el.rtip.style.left = (cx + 22 - sr2.left + 10).toFixed(1) + 'px'
+        el.rtip.style.top = (cy - sr2.top).toFixed(1) + 'px'
+      }
+    }
+
+    /* ── the worker overlay ── */
+    var wIn = outCubic(seg(t, WOV_IN, WOV_IN + 0.22))
+    var wOut = outCubic(seg(t, WOV_OUT, WOV_OUT + 0.20))
+    var wA = clamp(wIn - wOut, 0, 1)
+    el.wovbd.style.opacity = wA
+    el.wov.style.opacity = wA
+    el.wov.style.transform = 'scale(' + (0.985 + 0.015 * wA).toFixed(4) + ')'
+    if (wA > 0.01) {
+      var ih = WSCROLL.map(function (l) {
+        return '<div class="ln old">' + (l === '' ? '&nbsp;' : l.replace(/</g, '&lt;')) + '</div>'
+      }).join('')
+      var lastI = -1
+      for (var m = 0; m < INJECT.length; m++) {
+        if (t < INJECT[m].at) continue
+        lastI = m
+        ih += '<div class="ln ' + INJECT[m].c + '">' +
+          (INJECT[m].s === '' ? '&nbsp;' : INJECT[m].s.replace(/</g, '&lt;').replace(/>/g, '&gt;')) +
+          (m === INJECT.length - 1 || t < (INJECT[m + 1] ? INJECT[m + 1].at : 1e9) ? '<span class="car"></span>' : '') +
+          '</div>'
+      }
+      if (el.wterm.dataset.k !== String(lastI)) { el.wterm.innerHTML = ih; el.wterm.dataset.k = String(lastI) }
+    }
+
+    /* ── the sheet, arriving and leaving ────────────────────────────────────
+       The container's travel and the four pieces' travels are separate on purpose:
+       the pieces are offset from where the container has already got to, so the
+       sheet is never a slab and never a stack of unrelated slides either. Leaving
+       is one movement — a dismissal is a single act, and the component's is too.
+       `RISE` still owns the clock the segments are derived from; only the visible
+       arrival is described here. */
+    var up = outCubic(seg(t, RISE_FROM, RISE_TO))
+    var down = outCubic(seg(t, AT.writeback + 1.40, AT.writeback + 1.60))
+    el.sheet.style.transform = 'translateY(' + ((1 - up) * 100 + down * 100).toFixed(2) + '%)'
+    el.bd.style.opacity = clamp(up - down, 0, 1)
+    for (var pi = 0; pi < PIECES.length; pi++) {
+      var P0 = PIECES[pi]
+      var pu = outCubic(seg(t, P0.at, P0.at + PIECE_FOR))
+      /* it fades faster than it travels, so nothing arrives as a hard edge sliding
+         up — the piece is most of the way there before it is fully opaque */
+      var pa = seg(t, P0.at, P0.at + PIECE_FOR * 0.55)
+      P0.el.style.transform = 'translateY(' + ((1 - pu) * P0.lift).toFixed(2) + 'px)'
+      P0.el.style.opacity = pa.toFixed(3)
+    }
+
+    /* ── the centre: a spec form until a run exists, then the orchestrator's own
+          terminal, which is what the component does — with a live orch panel the
+          spec form is not rendered at all. ── */
+    var running = t >= ORCH_AT
+    el.specform.style.display = running ? 'none' : ''
+    el.term.style.display = running ? '' : 'none'
+
+    /* ── the spawns: + Agent -> a CLI -> Spawn, and the footer's left control
+          becomes the confirm row in place — four times over, so the flow is
+          driven off whichever pass is live, and the passes never overlap ── */
+    var actSp = null
+    for (var si = 0; si < SPAWNS.length; si++) {
+      if (t >= SPAWNS[si].press && t < SPAWNS[si].rowTo) { actSp = SPAWNS[si]; break }
+    }
+    var menuOpen = !!actSp && t >= actSp.menuFrom && t < actSp.menuTo
+    var spawnRow = !!actSp && t >= actSp.rowFrom && t < actSp.rowTo
+    var openMenu = el.agentslot.querySelector('.menu')
+    if (openMenu && !menuOpen) openMenu.remove()
+    if (menuOpen && !el.agentslot.querySelector('.menu')) {
+      el.agentslot.insertAdjacentHTML('beforeend', AGENT_MENU); deaden()
+    }
+    if (menuOpen) {
+      var item = el.agentslot.querySelector('[data-k=' + actSp.key + ']')
+      if (item) item.className = 'it' + (t >= actSp.press + actSp.s.itemAt ? ' on' : '')
+    }
+    if (spawnRow) {
+      if (!el.agentslot.querySelector('.spawnrow')) {
+        el.btnAgent.style.display = 'none'
+        el.agentslot.insertAdjacentHTML('beforeend',
+          '<div class="spawnrow"><span class="chip">' + actSp.chip + '</span>' +
+          '<span class="msel">' +
+            (actSp.model || '<span style="color:var(--o-faint)">select model</span>') +
+            ' <span class="cv">&#9650;</span></span>' +
+          '<span class="go" id="btn-spawn">Spawn</span></div>')
+        deaden()
+      }
+    } else {
+      var sr = el.agentslot.querySelector('.spawnrow')
+      if (sr) { sr.remove(); el.btnAgent.style.display = '' }
+    }
+    el.btnAgent.className = 'gbtn' + (actSp && t < actSp.rowFrom ? ' hot' : '')
+    /* the Group control leaves while a spawn is being confirmed: the component
+       renders it behind `!spawnAgentKey`, and keeping it squeezed the chip, the
+       model select and Spawn into half a 222pt column */
+    el.groupslot.style.display = spawnRow ? 'none' : 'flex'
+
+    /* ── the group: Group -> New group -> the name, typed into the real field ── */
+    var gMenu = t >= G.menu && t < G.menuEnd
+    var gForm = t >= G.form && t < G.born
+    var openG = el.groupslot.querySelector('.menu')
+    if (openG && !gMenu) openG.remove()
+    if (gMenu && !el.groupslot.querySelector('.menu')) {
+      el.groupslot.insertAdjacentHTML('beforeend', GROUP_MENU); deaden()
+    }
+    if (gMenu) {
+      var ni = el.groupslot.querySelector('[data-k=new]')
+      if (ni) ni.className = 'it' + (t >= G.itemAt ? ' on' : '')
+    }
+    if (gForm) {
+      if (!el.groupslot.querySelector('.gform')) {
+        el.btnGroup.style.display = 'none'
+        el.groupslot.insertAdjacentHTML('beforeend',
+          '<div class="gform"><span class="gin focus" id="gin"></span><span class="ok">&#10003;</span></div>')
+        deaden()
+      }
+      /* typed with no click into the field first: the component autofocuses it */
+      var nch = reduce ? GNAME.length
+        : Math.floor(seg(t, G.typeFrom, G.typeFrom + G.typeFor) * GNAME.length + 0.0001)
+      var gin = document.getElementById('gin')
+      if (gin) gin.innerHTML = nch === 0
+        ? '<span class="ph">Group name&hellip;</span><span class="car"></span>'
+        : GNAME.slice(0, nch) + '<span class="car"></span>'
+    } else {
+      var gf = el.groupslot.querySelector('.gform')
+      if (gf) { gf.remove(); el.btnGroup.style.display = '' }
+    }
+    el.btnGroup.className = 'gbtn' + (t >= G.press && t < G.menuEnd ? ' hot' : '')
+
+    /* the transcript */
+    var html = '', lastVisible = -1
+    for (var i = 0; i < TERM.length; i++) {
+      var L = TERM[i]
+      if (t < L.at) continue
+      lastVisible = i
+      var s = L.s
+      if (L.type) {
+        if (!reduce) s = s.slice(0, Math.round(s.length * clamp((t - L.at) / TYPE_FOR, 0, 1)))
+      }
+      html += '<div class="ln ' + L.c + '">' + (s === '' ? '&nbsp;' : s.replace(/</g, '&lt;')) +
+        (i === TERM.length - 1 || t < (TERM[i + 1] ? TERM[i + 1].at : 1e9) ? '<span class="car"></span>' : '') +
+        '</div>'
+    }
+    if (el.term.dataset.k !== String(lastVisible) + ':' + html.length) {
+      el.term.innerHTML = html
+      el.term.dataset.k = String(lastVisible) + ':' + html.length
+    }
+
+    /* ── the register ────────────────────────────────────────────────────────
+       The states in sequence, and each is the component's own: the other
+       project's column, then jerico's — never empty, because the planner group
+       was made before this scene — then the orchestrator ungrouped, then a
+       second group with four workers under it. The orchestrator is deliberately
+       NOT in a group — it dispatches to the group, it is not a member of it. */
+    var n = 0, running = 0
+    for (var j = 0; j < ROWS.length; j++) {
+      if (t >= ROWS[j].at) n++
+      if (t >= ROWS[j].run) running++
+    }
+    var groupExists = t >= G.born
+
+    /* Before the switch this column belongs to the other project, and it holds a
+       worker of that project's — NOT an orchestrator, because with a live orch panel
+       the component does not render the spec form at all, and the centre here is
+       still the spec form. A running worker is also exactly what orca's rail dot
+       claims: `projectHasRunning` counts panels whose role is not orchestrator.
+
+       "Tab scope is authoritative: project tabs see ONLY their project's workers" —
+       so the press does not filter this row out, it replaces the column with
+       jerico's. And jerico's is not empty: the planner group was there before the
+       scene opened, with four idle members — panels that are not running, which
+       is why they count toward Agents but light nothing on the tile. */
+    var onOther = t < P.press
+    n += onOther ? 1 : 4           // orca's worker before the switch, four planner members after
+    if (onOther) running += 1
+    el.grp0.style.display = onOther ? 'none' : ''
+    /* The pre-existing group is opened long enough to prove its four members,
+       then folds as review is created. The header and count remain, so history
+       stays visible without forcing nine rows into a 222px rail. */
+    var plannerOpen = onOther ? 0 : (reduce ? (t < G.press ? 1 : 0)
+      : 1 - outCubic(seg(t, G.press, G.press + 0.34)))
+    el.grows0.style.height = (plannerOpen * 112).toFixed(1) + 'px'
+    el.grows0.style.opacity = plannerOpen.toFixed(3)
+    el.grows0.style.transform = 'translateY(' + ((1 - plannerOpen) * -5).toFixed(1) + 'px)'
+    el.gchev0.textContent = plannerOpen > 0.5 ? '\u25be' : '\u25b8'
+
+    el.empty.style.display = n === 0 ? '' : 'none'
+    var orchOn = onOther || t >= ROWS[0].at
+    el.orow.style.display = orchOn ? '' : 'none'
+    if (el.orow.dataset.p !== (onOther ? 'o' : 'j')) {
+      el.orow.dataset.p = onOther ? 'o' : 'j'
+      el.orow.innerHTML = '<div class="wrow"><span class="dot run"></span><span class="nm">' +
+        (onOther ? 'Codex CLI #1 <span style="color:var(--o-faint)">\u00b7 developer</span>'
+                 : 'Claude Code #2 \u00b7 Sonnet <span style="color:var(--o-faint)">\u00b7 orchestrator</span>') +
+        '</span></div>'
+      deaden()
+    }
+    if (orchOn) el.orow.firstElementChild.setAttribute('style',
+      onOther ? 'max-height:34px;opacity:1;overflow:hidden;transition:none' : slideIn(t, ROWS[0].at))
+
+    el.grp.style.display = groupExists ? '' : 'none'
+    if (groupExists) {
+      el.grp.firstElementChild.setAttribute('style', slideIn(t, G.born))
+      var inGroup = [], gRunning = 0
+      for (var g = 1; g < ROWS.length; g++) {
+        if (t < ROWS[g].at) continue
+        inGroup.push(ROWS[g])
+        if (t >= ROWS[g].run) gRunning++
+      }
+      var gKey = inGroup.length + ':' + gRunning +
+        (inGroup.length && t < inGroup[inGroup.length - 1].at + 0.20 ? ':' + Math.round(t * 30) : '')
+      if (el.grows.dataset.k !== gKey) {
+        var rows = ''
+        for (var q = 0; q < inGroup.length; q++) {
+          rows += '<div class="wrow ingrp" style="' + slideIn(t, inGroup[q].at) + '">' +
+            '<span class="tree">' + (q === inGroup.length - 1 ? '\u2514\u2500' : '\u251c\u2500') + '</span>' +
+            '<span class="dot' + (t >= inGroup[q].run ? ' run' : '') + '"></span>' +
+            '<span class="nm">' + inGroup[q].name + ' <span style="color:var(--o-faint)">\u00b7 ' + inGroup[q].role + '</span></span></div>'
+        }
+        el.grows.innerHTML = rows
+        el.grows.dataset.k = gKey
+      }
+      /* the header's count is the component's rule: the running dot and n when any
+         are running, else the plain panel count */
+      el.gcnt.innerHTML = gRunning > 0
+        ? '<i></i><span>' + gRunning + '</span>'
+        : '<span>' + inGroup.length + '</span>'
+    }
+
+    /* the created flash, and it leaves — a confirmation that stays is a label */
+    var fl = seg(t, G.born, G.born + 0.20) * (1 - seg(t, G.born + 2.6, G.born + 3.0))
+    el.flash.style.display = fl > 0.01 ? '' : 'none'
+    el.flash.style.opacity = fl
+
+    el.agcount.textContent = String(n)
+    var chips = running > 0
+      ? '<span class="run"><i style="width:6px;height:6px;border-radius:50%;background:currentColor;display:block"></i>' + running + '</span>'
+      : ''
+    if (el.chips.dataset.k !== String(running)) { el.chips.innerHTML = chips; el.chips.dataset.k = String(running) }
+
+    /* The run progress appears only once a run exists — there is nothing to
+       report before Run Orchestrator is pressed, and a 0/9 on an idle panel
+       would be inventing a run. */
+    if (t < ORCH_AT) { el.prog.innerHTML = ''; el.prog.dataset.k = '' }
+    else {
+      var doneN = (t >= AT.dispatch + 3.4 ? 1 : 0)
+      if (el.prog.dataset.k !== String(doneN)) {
+        el.prog.innerHTML = '<span class="n">' + doneN + '/3</span><span class="bar"><i style="width:' +
+          Math.round(doneN / 3 * 100) + '%"></i></span>'
+        el.prog.dataset.k = String(doneN)
+      }
+    }
+
+    /* the log */
+    var ev = ''
+    for (var k = 0; k < EVENTS.length; k++) {
+      var E = EVENTS[k]
+      if (t < E.at - 1e-6) continue   /* AT.writeback + 2.30 is 20.900000000000002 */
+      ev += '<div class="row' + (E.mute ? ' mute' : '') + (E.fresh && t < E.at + 2.6 ? ' fresh' : '') + '"' +
+        (E.fresh ? ' style="' + flyIn(t, E.at) + '"' : '') + '>' +
+        '<span class="role ' + E.role + '">' + E.role + '</span>' +
+        '<span class="dot" style="background:' + E.dot + '"></span>' +
+        '<span class="sum">' + E.s + '</span>' +
+        (E.badge ? '<span class="badge">' + E.badge + '</span>' : '') +
+        '<span class="ago">' + E.ago + '</span>' +
+        '<span class="pid">' + E.pid + '</span></div>' +
+        (E.tags ? '<div class="tags">' + E.tags.map(function (x) { return '<span>#' + x + '</span>' }).join('') + '</div>' : '')
+    }
+    /* The list is normally rendered only when its content changes — but a row
+       that is still flying has to be redrawn every frame, so the key carries the
+       clock while the flight is running. Without it the row froze partway: 6px
+       short and 74% opaque, forever. */
+    var flying = t >= FRESH_AT && t < FRESH_AT + 0.24
+    var evKey = ev.length + ':' + (t >= FRESH_AT && t < FRESH_AT + 2.6 ? 1 : 0) +
+      (flying ? ':' + Math.round(t * 60) : '')
+    if (el.evlist.dataset.k !== evKey) {
+      el.evlist.innerHTML = ev
+      el.evlist.dataset.k = evKey
+    }
+  }
+
+  function frame(t) {
+    lastDrawn = t
+    ctx.clearRect(0, 0, W, H)
+    /* ── this is a continuation, not a second overture ───────────────────────
+       This used to be the film's own opening replayed: a .42 wash climbing over
+       1.4s. After 07 the audience has already had that, so a second crescendo says
+       "a new film is starting" when it is the same session carrying on. The wash is
+       shallower (.34), it settles in 0.8s rather than swelling over 1.4, and the
+       piece it belongs to is the WINDOW ARRIVING rather than a curtain going up.
+       The film's own values are untouched where they belong, in 04 and 07. */
+    /* ── the wash is ALREADY THERE, and that is the second half of the seam ──
+       It used to climb 0 -> .34 over 0.8s. 07 ends with its own scrim at exactly
+       zero, so in sequence the room came up to full brightness and then went down
+       again — a second lights-down, 0.8 seconds long, right where the audience is
+       being told a new surface has arrived. It takes 0.24 now — four frames, which
+       is a cut being softened rather than a room being darkened — and it is the
+       same third of a stop the film dimmed this desktop by throughout.
+
+       The bleed still comes in over its own second and a half, because the ember
+       under the frame is warmth rather than dimming and it has somewhere to go. */
+    scrimEl.style.opacity = clamp(0.34 * outCubic(seg(t, 0.02, 0.26)) -
+      0.34 * inOutCubic(seg(t, END, END + 1.8)), 0, 1)
+    bleedEl.style.opacity = clamp(0.22 * seg(t, 0.4, 1.6) * (1 - seg(t, END, END + 1.4)), 0, 1)
+
+    /* ── the browser is in front, and it does not fade in ─────────────────────
+       It used to arrive over half a second, which was fine on an empty desk and
+       wrong the moment there were two windows behind it: measured at 0.30 you could
+       read the Finder windows THROUGH it. A window does not become translucent when
+       it comes forward. So this is three frames — enough that the cut is not a pop,
+       far too few to be a dissolve — with the fraction of a percent of scale a
+       window on this platform gains as it takes focus.
+
+       The menu bar says Chrome from the first frame, which is the honest pairing:
+       the app that owns the menu bar is the app whose window is in front, and at a
+       cut that puts a browser in front, both change together. What carries the
+       continuity across the seam is everything else — the same wallpaper, the same
+       two windows, the same 06:14. */
+    var fwd = outCubic(seg(t, 0.02, 0.16))
+    browEl.style.opacity = fwd.toFixed(3)
+    browEl.style.transform = 'scale(' + (0.992 + 0.008 * fwd).toFixed(4) + ')'
+
+    state(t)
+    subjectLight(t)
+    lines(t)
+    cursor(t)
+  }
+  var lastDrawn = 0
+
+
+  /* ── the statement's home, and the light it points with ────────────────────
+     Bottom left, once and for all: the statement is a caption on a picture, not a
+     title over it, and out of the way is the whole point. What replaces the dark
+     plate behind it is a lit SUBJECT — `#lit`, positioned from the element the
+     line is actually about, blended `plus-lighter` exactly as the film's bleed is.
+     Describing something by darkening it was the wrong way round. */
+  var SAY_X = 110, SAY_BASE = H - 62
+  var litEl = document.getElementById('lit')
+
+  /* `lit` may be a selector or a list of them, first that exists winning — a
+     subject can be one thing before an action and another after it (the spec
+     button becomes the terminal that replaced it). Several matches are unioned,
+     which is how a subject can be "the three tool calls" or "the two rules"
+     rather than the whole column they sit in.
+
+     And a size guard, because the first version lit `#term` — 935 x 658, the
+     entire centre column. A glow that large is not pointing at anything, it is a
+     second wash. If the union is bigger than the frame can call a subject, the
+     light stays off rather than lying about what it means. */
+  function litOver(sel, a, onLight) {
+    if (!sel || a < 0.02) { litEl.style.opacity = 0; return }
+    var list = (typeof sel === 'string') ? [sel] : sel
+    var sr = cv.getBoundingClientRect()
+    if (!sr.width) { litEl.style.opacity = 0; return }
+    var box = null
+    for (var i = 0; i < list.length && !box; i++) {
+      var nodes = document.querySelectorAll(list[i])
+      for (var n = 0; n < nodes.length; n++) {
+        var r = nodes[n].getBoundingClientRect()
+        if (!r.width || !r.height) continue
+        box = box
+          ? { l: Math.min(box.l, r.left), t: Math.min(box.t, r.top),
+              r: Math.max(box.r, r.right), b: Math.max(box.b, r.bottom) }
+          : { l: r.left, t: r.top, r: r.right, b: r.bottom }
+      }
+    }
+    if (!box) { litEl.style.opacity = 0; return }
+    var k = sr.width / W
+    var x = (box.l - sr.left) / k, y = (box.t - sr.top) / k
+    var w = (box.r - box.l) / k, h = (box.b - box.t) / k
+    /* A guard that switched OFF was the wrong instrument, twice over. It measured
+       width first and rejected every real subject (terminal lines are blocks, so
+       "the three tool calls" is 815 x 62). Then it measured area and cut out
+       mid-beat as a subject GREW — the written block passes 210k around its
+       twelfth line, so the light died halfway through the thing it was pointing
+       at, which is exactly the "incomplete" this was reported as.
+
+       The size does not decide WHETHER to light, it decides HOW MUCH. A small
+       subject takes a bright glow; a large one takes a soft one, so it stays a
+       light and never becomes a second wash. Only a genuinely frame-sized union
+       is refused. */
+    var area = w * h
+    if (area > 760000) { litEl.style.opacity = 0; return }
+    /* Two dials, not one. The EDGE stays essentially constant — it is what makes
+       the box definite, and dimming it is what made the treatment look cheap on
+       big subjects. The FILL is what has to yield: a small subject can carry a
+       real wash of light, a large one gets almost none, or the box becomes a
+       panel laid over the product instead of a light on it. */
+    var strength = clamp(1 - (area - 60000) / 1400000, 0.68, 1)
+    litEl.style.setProperty('--fill', (clamp(9000 / Math.max(area, 9000), 0.035, 0.16)).toFixed(3))
+    litEl.style.setProperty('--mark', clamp(Math.min(w, h) * 0.30, 6, 15).toFixed(1) + 'px')
+    litEl.style.setProperty('--edge', (0.34 + 0.16 * clamp(60000 / Math.max(area, 60000), 0, 1)).toFixed(3))
+    litEl.classList.toggle('large', area > 26000)
+    /* 10, not 44: a box hugs its subject; a wide feather was the glow's job */
+    var pad = 10
+    /* clamped, so the feather is not spent off the top of the frame — the tray
+       glyph sits at y 15 and half its glow was outside the picture */
+    var top = Math.max(y - pad, 2)
+    litEl.style.left = ((x - pad) * k) + 'px'
+    litEl.style.top = (top * k) + 'px'
+    litEl.style.width = ((w + pad * 2) * k) + 'px'
+    litEl.style.height = ((h + pad * 2 - (top - (y - pad))) * k) + 'px'
+    litEl.classList.toggle('on-light', !!onLight)
+    litEl.style.opacity = a * strength
+  }
+
+  /* ── what is lit, moment by moment ────────────────────────────────────────
+     The light used to be tied to the STATEMENT, and that was the mistake: a
+     caption is on screen for about three seconds and the things that matter
+     happen whether or not one is showing. So most of the scene was unlit, and
+     the moments that mattered most — a row landing, a group being born, an
+     envelope arriving — often had no light at all.
+
+     It follows the ACTION now. This table covers the scene end to end, every
+     entry derived from the same constants the pictures are, so a moved segment
+     takes its light with it. The statement is independent again: it says its line
+     bottom-left and points at nothing. */
+  var SUBJECTS = [
+    /* The two tiles as ONE subject — the switch is the pair, not either half — and
+       therefore ONE selector: `litOver` unions the matches of the first entry that
+       has any and stops, so a two-entry list would have lit the jerico tile alone
+       (measured 61x61, the tile and its padding). */
+    { at: AT.project + 0.35, until: P.press + 0.70, sel: ['#tl-j, #tl-o'] },
+    { at: P.press + 0.72,    until: AT.start + 0.35, sel: ['#grp0 .ghdr'] },
+    { at: AT.start + 0.45,  until: RUN_PRESS + 0.30, sel: ['#btn-run'] },
+    { at: ORCH_AT + 0.10,   until: G.press,          sel: ['#orow .wrow'] },
+    { at: G.press,          until: G.born,           sel: ['#gin', '#m-group [data-k=new]', '#btn-group'] },
+    { at: G.born,           until: SPAWN.press,      sel: ['#grp .ghdr'] },
+    { at: AT.read + 0.80,   until: AT.read + 3.30,   sel: ['#term .ctx, #term .call'] },
+    { at: AT.read + 3.30,   until: AT.rules + 0.90,  sel: ['#term .res'] },
+    { at: AT.rules + 1.00,  until: AT.dispatch + 0.60, sel: ['#term .say'] },
+    { at: AT.dispatch + 0.70, until: WOV_IN,         sel: ['#grp .ghdr'] },
+    { at: WOV_IN + 0.45,    until: WOV_OUT,          sel: ['#wterm .grd, #wterm .rule'] },
+    { at: FRESH_AT,         until: END + 0.4,        sel: ['#evlist .row.fresh'] }
+  ]
+  /* one subject per spawn pass: the footer control, its menu pick, its row */
+  SPAWNS.forEach(function (sp) {
+    SUBJECTS.push({ at: sp.press, until: sp.at,
+      sel: ['.spawnrow', '#m-agent [data-k=' + sp.key + ']', '#btn-agent'] })
+    SUBJECTS.push({ at: sp.at, until: sp.at + 0.52, sel: ['#grows .wrow:last-child'] })
+  })
+  SUBJECTS.push({ at: SPAWNS[SPAWNS.length - 1].at + 0.52,
+    until: AT.read + 0.60, sel: ['#grp .ghdr'] })
+
+  /* The strongest subject at t wins, and it is chosen BEFORE anything is drawn.
+     The first version took the first entry whose window contained t and returned
+     — so during the overlap where one subject is fading out and the next is
+     fading in, it committed to the outgoing one, kept its box, and the light sat
+     at the old coordinates while the new subject was elsewhere on screen.
+     Measured: the group header at 1038,262 with the light still at 955,407. */
+  function subjectLight(t) {
+    var best = null, bestA = 0
+    for (var i = 0; i < SUBJECTS.length; i++) {
+      var s = SUBJECTS[i]
+      if (t < s.at || t > s.until) continue
+      var a = seg(t, s.at, s.at + 0.30) * (1 - seg(t, s.until - 0.30, s.until))
+      /* Equal-strength windows belong to the newer action. Without this tie-break,
+         the settled group-row light kept winning while the second, third and
+         fourth spawn menus were already the subject. */
+      if (a > bestA || (a === bestA && best && s.at > best.at)) { bestA = a; best = s }
+    }
+    if (!best || bestA < 0.02) { litEl.style.opacity = 0; litEl.dataset.subject = ''; return }
+    /* recorded, not for the picture but so anyone — including a test — can ask
+       what the light is claiming to point at without reading the table */
+    litEl.dataset.subject = best.sel[0]
+    litOver(best.sel, bestA * 0.95, best.onLight)
+  }
+
+  /* how long a statement stays after it has finished arriving */
+  var SAY_HOLD = 2.0
+  var LINES = [
+    { at: AT.project + 0.45,   s: 'each project gets its own orchestrator' },
+    { at: AT.start + 0.55,     s: 'start it here \u2014 the spec can stay blank' },
+    { at: AT.group + 0.30,     s: 'a group you can name' },
+    { at: AT.staff + 0.20,     s: 'and your own tools go in it' },
+    { at: AT.read + 0.50,      s: 'it starts by reading yesterday' },
+    { at: AT.rules + 0.30,     s: 'some of what it reads is a rule' },
+    { at: WOV_IN + 0.40,       s: 'and the rules travel with the work' },
+    { at: AT.writeback + 1.90, s: 'the project remembers, and so does the team' }
+  ]
+
+
+  /* ── announce ───────────────────────────────────────────────────────────
+     One statement, once, in order. Not the picture described — the line the
+     picture exists to deliver. Escape and Skip are stated first so the way out
+     is known before the piece begins rather than discovered after it. */
+  var said = -1
+  function announce(i, text) {
+    if (i <= said) return
+    said = i
+    var el = document.getElementById('say')
+    if (el) el.textContent = text
+  }
+
+  function lines(t) {
+    LINES.forEach(function (L, i) {
+      /* ── a statement is punctuation, not a layer ─────────────────────────
+         It used to hold until the NEXT statement arrived, which in a scene with
+         four of them meant it was on screen almost continuously — so a caption
+         became a permanent overlay and the product was reviewed through it. It
+         now arrives, holds while it can be read, and LEAVES. Between statements
+         the screen is entirely the thing being shown, which is the whole point
+         of showing it. */
+      var nxt = (i + 1 < LINES.length) ? LINES[i + 1].at : END + 0.3
+      var done = L.at + 0.87                 // the reveal has finished by here
+      var outAt = Math.min(done + SAY_HOLD, nxt - 0.30)
+      var a = seg(t, L.at, L.at + 0.20) * (1 - seg(t, outAt, outAt + 0.42))
+      if (a < 0.01) return
+      announce(i, L.s)
+      var shown = reduce ? L.s : L.s.slice(0, Math.round(L.s.length * clamp((t - L.at) / 0.87, 0, 1)))
+      /* ── the statement ────────────────────────────────────────────────
+         Not a caption strip. Two drafts were wrong in opposite directions: a
+         mono line at 15px, which turned to mush over a UI that is also mono,
+         and then a full-width subtitle band, which was legible and looked like
+         television — a plate lying on top of the picture.
+
+         The film already solved exactly this. Its credit "carries its own
+         falloff — wide and very soft, so it reads as the light being absent
+         there, not as a plate". Same vocabulary, at presentation scale: the
+         statement stands in the upper left with air around it, the light is
+         simply absent behind it, and nothing is boxed.
+
+         Emphasis in this language is a weight drop at expanded width and never
+         a colour change, so the type is 300 at 1.1× — the same trick the
+         wordmark uses with ctx.scale. */
+      /* Bottom left, and it points with LIGHT rather than shade. `#lit` brightens
+         the element the line is about — the film's own bleed technique,
+         `plus-lighter` — instead of a dark falloff dimming a third of the frame
+         to make a caption readable. Describing a thing by darkening it was the
+         wrong way round. */
+      var cx = SAY_X, cy = SAY_BASE
+      /* A measured elliptical matte has no fixed right edge. On this dark product
+         surface it stays lighter than 07's wallpaper treatment and only separates
+         the statement from dense terminal glyphs. */
+      ctx.save()
+      ctx.font = '300 38px Archivo, system-ui, -apple-system, sans-serif'
+      var fullW = ctx.measureText(L.s).width * 1.1
+      var matteW = clamp(fullW + 170, 400, 1010)
+      var matteR = 68
+      ctx.translate(cx + fullW * 0.5, cy - 9)
+      ctx.scale((matteW * 0.5) / matteR, 1)
+      var pad = ctx.createRadialGradient(0, 0, 0, 0, 0, matteR)
+      pad.addColorStop(0, 'rgba(6,7,11,.22)')
+      pad.addColorStop(0.58, 'rgba(6,7,11,.12)')
+      pad.addColorStop(1, 'rgba(6,7,11,0)')
+      ctx.globalAlpha = a
+      ctx.fillStyle = pad
+      ctx.fillRect(-matteR, -matteR, matteR * 2, matteR * 2)
+      ctx.restore()
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(1.1, 1)
+      ctx.font = '300 38px Archivo, system-ui, -apple-system, sans-serif'
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+      ctx.fillStyle = '#fffdf8'
+      ctx.globalAlpha = a * 0.97
+      ctx.shadowColor = 'rgba(4,6,10,.38)'
+      ctx.shadowBlur = 7
+      ctx.shadowOffsetY = 1
+      ctx.fillText(shown, 0, 0)
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+      if (shown.length < L.s.length) ctx.fillRect(ctx.measureText(shown).width + 7, -12, 10, 2)
+      ctx.restore()
+      ctx.globalAlpha = 1
+    })
+  }
+
+  /* ── the schedule the focus follows ───────────────────────────────────────
+     Three controls, in order, and all three exist: a worker row (which expands
+     it), the overlay's own "Move to bottom" dash, and the sheet's ChevronDown.
+     No travel to time — focus names a control when it becomes the subject. */
+  var WAY = [
+    { at: P.focus - 0.05,       to: '#tl-j' },
+    { at: AT.start + 0.55,      to: '#btn-run' },
+    { at: G.press - 0.20,       to: '#btn-group' },
+    { at: G.itemAt - 0.15,      to: '#m-group [data-k=new]' },
+    { at: G.form + 0.05,        to: '#gin' },
+    { at: G.okAt - 0.15,        to: '.gform .ok' },
+    { at: WOV_IN - 0.50,        to: '#grows .wrow' },
+    { at: WOV_OUT - 0.35,       to: '#wovmin' },
+    { at: AT.writeback + 1.15,  to: '#minbtn' }
+  ]
+  /* each spawn pass walks the same three controls: + Agent, its menu item, Spawn */
+  SPAWNS.forEach(function (sp) {
+    WAY.push({ at: sp.press - 0.20, to: '#btn-agent' },
+             { at: sp.press + sp.s.itemAt - 0.10, to: '#m-agent [data-k=' + sp.key + ']' },
+             { at: sp.press + sp.s.spawnAt - 0.10, to: '#btn-spawn' })
+  })
+  WAY.sort(function (a, b) { return a.at - b.at })
+  var CLICKS = [P.press, RUN_PRESS, G.press, G.itemAt + 0.10, G.okPress,
+                WOV_IN - 0.20, WOV_OUT - 0.10, AT.writeback + 1.35]
+  SPAWNS.forEach(function (sp) {
+    CLICKS.push(sp.press, sp.press + sp.s.pickPress, sp.press + sp.s.spawnPress)
+  })
+  CLICKS.sort(function (a, b) { return a - b })
+
+  /* ── focus, not a pointer ─────────────────────────────────────────────────
+     A drawn macOS arrow was an OS artefact imported into a product's own
+     surface, and it cost 0.62s of travel per hop in a sequence already judged
+     too slow. Inside the app there is a better vocabulary and the app already
+     owns it: `focus-visible:ring-2 focus-visible:ring-accent-ring`, which is
+     `rgba(245,158,11,.50)` — and the worker rows carry it themselves
+     (GlobalOrchestratorPanel.svelte:3284), so a ring on a row is literally what
+     the product draws when that row is reached.
+
+     Focus also does what a pointer cannot: it names one element exactly, with no
+     travel, so the eye is led without anything sliding across the frame. The
+     pointer survives in exactly one place — 07's press on the tray icon, which is
+     an OS surface with no focus vocabulary of its own.
+
+     Activation is a brightening and a small expansion of the ring rather than a
+     ripple from a mouse point, because there is no mouse point any more. */
+  function focusRect(sel) {
+    var node = document.querySelector(sel); if (!node) return null
+    var r = node.getBoundingClientRect(), sr = cv.getBoundingClientRect()
+    if (!r.width || !sr.width) return null
+    var k = sr.width / W
+    return { x: (r.left - sr.left) / k, y: (r.top - sr.top) / k, w: r.width / k, h: r.height / k }
+  }
+  function roundRect(c, x, y, w, h, rad) {
+    c.beginPath()
+    c.moveTo(x + rad, y)
+    c.arcTo(x + w, y, x + w, y + h, rad)
+    c.arcTo(x + w, y + h, x, y + h, rad)
+    c.arcTo(x, y + h, x, y, rad)
+    c.arcTo(x, y, x + w, y, rad)
+    c.closePath()
+  }
+  /* Each entry lives from the moment its control becomes the subject until
+     shortly after it is pressed — not until the next one arrives. Between
+     interactions there is no ring at all, which is what focus actually looks
+     like and also what keeps the film off the product.
+
+     The rect is cached: a target can leave the document mid-beat (a menu closes,
+     a form is replaced, a sheet slides away) and a re-measured element that is
+     moving or gone made the ring either jump or ride down with it. Cached, it
+     fades where it was. */
+  ;(function planFocus() {
+    for (var i = 0; i < WAY.length; i++) {
+      var next = (i + 1 < WAY.length) ? WAY[i + 1].at : 1e9
+      var press = null
+      for (var c = 0; c < CLICKS.length; c++) {
+        if (CLICKS[c] >= WAY[i].at - 0.02 && CLICKS[c] < next) { press = CLICKS[c]; break }
+      }
+      WAY[i].press = press
+      WAY[i].end = Math.min(press !== null ? press + 0.42 : WAY[i].at + 1.10, next)
+    }
+  })()
+  var ringCache = {}
+
+  function cursor(t) {
+    cursCtx.clearRect(0, 0, W, H)
+    var idx = -1
+    for (var i = 0; i < WAY.length; i++) if (t >= WAY[i].at && t < WAY[i].end) idx = i
+    if (idx < 0) return
+    var w = WAY[idx]
+    var a = seg(t, w.at, w.at + 0.13) * (1 - seg(t, w.end - 0.20, w.end))
+    if (a < 0.02) return
+
+    /* Before the press the ring tracks its control; after it, it stops and fades
+       where it was. Measured: the sheet's own ChevronDown is pressed and the sheet
+       immediately slides down, and a ring still measuring that element rode down
+       with it. After activation a ring is an afterimage, not a tracker. */
+    var pressed = w.press !== null && t > w.press + 0.02
+    var live = pressed ? null : focusRect(w.to)
+    if (live) ringCache[idx] = live
+    var r = live || ringCache[idx]
+    if (!r) return
+
+    var hot = 0
+    for (var c = 0; c < CLICKS.length; c++) {
+      var p = seg(t, CLICKS[c], CLICKS[c] + 0.30)
+      if (p > 0 && p < 1) hot = Math.max(hot, 1 - p)
+    }
+    var pad = 3 + 2 * hot
+    cursCtx.globalAlpha = a
+    if (hot > 0.02) {
+      cursCtx.strokeStyle = 'rgba(245,158,11,' + (0.22 * hot).toFixed(3) + ')'
+      cursCtx.lineWidth = 8
+      roundRect(cursCtx, r.x - pad - 3, r.y - pad - 3, r.w + (pad + 3) * 2, r.h + (pad + 3) * 2, 9)
+      cursCtx.stroke()
+    }
+    cursCtx.strokeStyle = 'rgba(245,158,11,' + (0.50 + 0.45 * hot).toFixed(3) + ')'
+    cursCtx.lineWidth = 2
+    roundRect(cursCtx, r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 6)
+    cursCtx.stroke()
+    cursCtx.globalAlpha = 1
+  }
+
+  /* ── the score ── */
+  var actx = null, master = null, muted = false, live = []
+  function stopAudio(){ live.forEach(function(n){ try{n.stop()}catch(e){} }); live = [] }
+  function tone(t0,f,dur,peak,type){
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime) return
+    window.__cues.push(+t0.toFixed(3))
+    var o=actx.createOscillator(), g=actx.createGain()
+    o.type=type||'sine'; o.frequency.value=f
+    g.gain.setValueAtTime(0.0001,t0)
+    g.gain.exponentialRampToValueAtTime(peak,t0+0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur)
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0+dur+0.02); live.push(o)
+  }
+  function noise(t0,dur,peak,f0,f1,q,peakAt){
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime) return
+    window.__cues.push(+t0.toFixed(3))
+    var len=Math.ceil(actx.sampleRate*dur)
+    var buf=actx.createBuffer(1,len,actx.sampleRate), d=buf.getChannelData(0)
+    for(var i=0;i<len;i++) d[i]=Math.random()*2-1
+    var src=actx.createBufferSource(); src.buffer=buf
+    var bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=q||0.7
+    bp.frequency.setValueAtTime(f0,t0); bp.frequency.linearRampToValueAtTime(f1,t0+dur)
+    var g=actx.createGain(), crest=t0+dur*(peakAt===undefined?0.5:peakAt)
+    g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(peak,crest)
+    g.gain.linearRampToValueAtTime(0.0001,t0+dur)
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t0); src.stop(t0+dur); live.push(src)
+  }
+  /* ── the flow is continuous even though the documents are not ──────────────
+     Three scenes are three DOCUMENTS with three AudioContexts, and the runner used
+     to end one and begin the next: the room tone died with the outgoing page and
+     the incoming page's bed climbed from nothing, so every seam had a hole in it
+     — reported as the background sound breaking at the transitions.
+
+     The runner keeps the outgoing scene alive for a moment after the next one has
+     mounted (it is covered by then, so this is audible only), and calls this. The
+     old room fades UNDER the new one instead of stopping before it. */
+  window.__fadeOut = function (sec) {
+    if (!actx || !master) return
+    var now = actx.currentTime, d = sec || 0.6
+    try {
+      master.gain.cancelScheduledValues(now)
+      master.gain.setValueAtTime(master.gain.value, now)
+      master.gain.linearRampToValueAtTime(0.0001, now + d)
+    } catch (e) { /* a context already closed has nothing to fade */ }
+  }
+  /* Readable because it has to be checkable: the score is the one part of these
+     sheets nobody can look at, so the crossfade's actual level is exposed rather
+     than asserted. */
+  window.__level = function () { return master ? master.gain.value : null }
+  /* Runner flags. `handover` means a scene follows this one, so anything that
+     would fade out at the end holds instead and lets the crossfade do it;
+     `joined` means one preceded it, so nothing needs to be established from
+     silence — the room is already playing. Absent for a sheet opened on its own,
+     which is why a standalone read is unchanged. */
+  var HANDOVER = /[?&]handover=1/.test(location.search)
+  /* every scheduled cue, for review and for the tests — the score is the one part
+     of these sheets you cannot see */
+  window.__cues = []
+  /* Clamped to now. `t0` is span-shifted, so a scene started mid-file schedules the
+     beginning of its own score in the past — and a negative time does not merely
+     get ignored, it THROWS: measured, `setValueAtTime ... -16.927` took the whole
+     bed with it and the scene played silent. For an envelope, "already arrived" is
+     the correct reading of a moment that has passed. */
+  function at(x) { return Math.max(x, actx.currentTime + 0.001) }
+  function schedule() {
+    /* Shifted by the span's own start, because the picture starts at PLAY_FROM and
+       the score used to start at zero regardless — so any beat played on its own,
+       or any run the flow starts mid-file, heard the wrong second of the score. */
+    var t0 = actx.currentTime + 0.05 - real(PLAY_FROM)
+    /* ── no bed at all, and that is the decision ──────────────────────────────
+       This scene had its own room tone: three oscillators at half 07's level with
+       the filter parked, written so that it would not read as a second overture.
+       It is gone. The fond belongs to the film and to the daemon screens it fades
+       out over, and once it has faded it does not come back — so the browser half
+       of the sequence plays over silence, broken only by its own cues.
+
+       Two things this is not. It is not the crossfade being undone: the seam still
+       hands over without a cut, and what crosses it now is whatever cue is still
+       decaying rather than a bed. And it is not an accident of taste — 07 already
+       records the same choice for its own second act, in the same words: "then
+       silence, broken only by typing under each line. Dia's own second act has
+       nothing else here at all — no bed, no pad, no swell per beat." What was
+       inconsistent was 08 reintroducing one. */
+    /* the window coming forward gets its own soft push, which is what replaces the
+       overture as this scene's way of starting */
+    noise(t0 + 0.05, 0.6, 0.026, 120, 480, 0.8, 0.3)
+    /* Every cue comes off the same constants the pictures do — a tool call ticks,
+       prose types, a press pushes — so a moved segment takes its sound with it. */
+    TERM.forEach(function (L) {
+      if (L.type) {
+        if (!L.s) return
+        for (var c = 0; c < 4; c++) tone(t0 + real(L.at + c * (TYPE_FOR / 4)), 1350 + (c % 4) * 130, 0.022, 0.0075, 'square')
+      } else if (L.c === 'call') {
+        tone(t0 + real(L.at), 1180, 0.030, 0.014, 'square')
+      }
+    })
+    /* the sheet rising — quieter than it was, since the window's arrival has just
+       been heard and two pushes half a second apart read as one clumsy thud */
+    noise(t0 + real(0.05), 0.45, 0.020, 150, 560, 0.8, 0.25)
+    /* one soft push per press */
+    CLICKS.forEach(function (ct) { noise(t0 + real(ct - 0.06), 0.34, 0.020, 150, 520, 0.8, 0.2) })
+    /* the group's name, typed */
+    for (var gc = 0; gc < GNAME.length; gc++) {
+      tone(t0 + real(G.typeFrom + gc * (G.typeFor / GNAME.length)), 1350 + (gc % 4) * 130, 0.026, 0.013, 'square')
+    }
+    /* each panel arriving */
+    ROWS.forEach(function (w) {
+      tone(t0 + real(w.at), 196, 0.5, 0.030); tone(t0 + real(w.at), 98, 0.7, 0.026, 'triangle')
+    })
+    /* the brief going out, and the envelope landing at the worker */
+    noise(t0 + real(AT.dispatch + 0.5), 0.5, 0.026, 140, 560, 0.8, 0.25)
+    noise(t0 + real(WOV_IN + 0.15), 0.7, 0.028, 130, 540, 0.75, 0.3)
+    /* the row landing in the log */
+    noise(t0 + real(FRESH_AT - 0.05), 0.6, 0.024, 160, 620, 0.7, 0.3)
+    /* the last light, as the browser comes back */
+    tone(t0 + real(END), 196, 2.2, 0.048)
+    tone(t0 + real(END), 98, 2.6, 0.052, 'triangle')
+  }
+
+
+  /* ── the drawn app is a picture, not an interface ────────────────────────
+     Its controls are real <button> elements because that is how you draw a
+     button honestly, and that put every one of them in the tab order AHEAD of
+     the way out: measured, the first Tab landed on the specimen's "Spawn
+     worker" instead of on Skip. A picture must not be operable. Run once at
+     init and again after anything is inserted, since the menus arrive by
+     innerHTML. */
+  function deaden() {
+    var n = document.querySelectorAll('.stage button')
+    for (var i = 0; i < n.length; i++) {
+      if (n[i].closest('.hud') || n[i].closest('.gate')) continue
+      n[i].tabIndex = -1
+    }
+  }
+
+  /* ── transport ── */
+  var raf=null, startedAt=0, playing=false
+  /* Derived, not written: the attribute in the markup was left at 27.4s while the
+     scene grew past it, so the last seconds could not be reached by dragging. */
+  range.max = String(Math.round(DUR_REAL * 100))
+  function setLabel(tr){ tlabel.textContent = tr.toFixed(2)+' / '+DUR_REAL.toFixed(1)+'s' }
+  /* ── reaching the end of a span does not silence it ────────────────────────
+     `stop()` killed every oscillator the moment the picture reached PLAY_TO, which
+     is why extending the bed's envelope changed nothing: the envelope was still
+     scheduled and the nodes were already stopped. With a scene to follow, the audio
+     is LEFT RUNNING and the runner's crossfade takes it down over 0.8s before the
+     document — and with it the AudioContext — is removed. Every other caller
+     (Skip, the scrubber, Replay) still silences immediately, which is what those
+     mean. */
+  function stop(keepAudio){ playing=false; if(raf) cancelAnimationFrame(raf); raf=null
+    if (!keepAudio) stopAudio()
+    if (typeof reduceTimers !== 'undefined') { reduceTimers.forEach(clearTimeout); reduceTimers = [] } }
+  function loop(){
+    var tr=PLAY_FROM+(performance.now()-startedAt)/1000
+    if(tr>=PLAY_TO){ tr=PLAY_TO; stop(HANDOVER) }
+    frame(authored(tr)); setLabel(tr); range.value=Math.round(tr*100)
+    if(playing) raf=requestAnimationFrame(loop)
+  }
+  function start(){
+    stop(); gate.hidden=true
+    if(!actx){
+      var AC=window.AudioContext||window.webkitAudioContext
+      actx=new AC()
+      var lim=actx.createDynamicsCompressor()
+      lim.threshold.value=-6; lim.knee.value=0; lim.ratio.value=20
+      lim.attack.value=0.002; lim.release.value=0.22
+      lim.connect(actx.destination)
+      master=actx.createGain(); master.gain.value=muted?0:0.72; master.connect(lim)
+    }
+    if(actx.state==='suspended') actx.resume()
+    /* Reduced motion samples settled frames on a compressed clock. The normal
+       cue score is authored against the full timeline, so playing it here made
+       sounds land on unrelated pictures (and discarded most late cues). */
+    if (reduce) { playReduced(); return }
+    schedule()
+    startedAt=performance.now(); playing=true; loop()
+  }
+  /* holds, then the tail — see the note by `reduce` */
+  var reduceTimers = []
+  function playReduced() {
+    reduceTimers.forEach(clearTimeout); reduceTimers = []
+    var HOLDS = reduceHolds()
+    HOLDS.forEach(function (ht, i) {
+      reduceTimers.push(setTimeout(function () { frame(ht); setLabel(real(ht)); range.value = Math.round(real(ht) * 100) },
+        i * REDUCE_HOLD_MS))
+    })
+    reduceTimers.push(setTimeout(function () {
+      /* the tail: from END the only thing moving is opacity */
+      startedAt = performance.now() - real(END) * 1000
+      playing = true
+      loop()
+    }, HOLDS.length * REDUCE_HOLD_MS))
+  }
+
+  playBtn.addEventListener('click', start)
+  replayBtn.addEventListener('click', start)
+  skipBtn.addEventListener('click', function(){ stop(); frame(authored(PLAY_TO)); setLabel(PLAY_TO); range.value=Math.round(PLAY_TO*100) })
+  muteBtn.addEventListener('click', function(){
+    muted=!muted
+    if(master) master.gain.value = muted?0:0.72
+    muteBtn.textContent = muted?'♪ sound off':'♪ sound on'
+  })
+  range.addEventListener('input', function(){ stop(); var tr=range.value/100; frame(authored(tr)); setLabel(tr) })
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'&&playing) skipBtn.click() })
+  window.addEventListener('resize', function(){ frame(lastDrawn) })
+
+  range.max = Math.round(DUR_REAL * 100)
+  deaden()
+  var m = /(?:^|#|&)t=([\d.]+)/.exec(location.hash)
+  if (m) { gate.hidden=true; frame(authored(parseFloat(m[1]))); setLabel(parseFloat(m[1])) }
+  else { frame(authored(PLAY_FROM)); setLabel(PLAY_FROM); range.value = Math.round(PLAY_FROM * 100) }
+})()
+</script>
+</body>
+</html>

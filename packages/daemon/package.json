@@ -1,0 +1,86 @@
+{
+  "name": "bridge-agent",
+  "version": "0.26.43",
+  "description": "Bridge local agent — connects your AI tools to Jerico",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "bridge-agent": "dist/index.js",
+    "bridge-mcp": "dist/bridge-mcp.cjs"
+  },
+  "files": [
+    "dist/",
+    "dist/scripts/",
+    "scripts/install-sim-prereqs.sh",
+    "scripts/postinstall.mjs",
+    "README.md",
+    "LICENSE",
+    "!dist/bin/**"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/postinstall.mjs",
+    "pkg:build": "node scripts/pkg-build.mjs"
+  },
+  "keywords": [
+    "jerico",
+    "bridge",
+    "ai-agent",
+    "claude",
+    "qwen",
+    "kimi",
+    "terminal",
+    "pty"
+  ],
+  "author": "Appnova EU OÜ",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Appnova-EU-OU/jerico.git",
+    "directory": "packages/daemon"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.10.0",
+    "http-proxy-middleware": "^4.2.0",
+    "node-pty": "1.2.0-beta.15",
+    "smol-toml": "^1.8.0"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/index.js",
+      "dist/bridge-mcp.cjs",
+      "dist/opencode-worker.js"
+    ],
+    "assets": [
+      "dist/scripts/**/*.sh",
+      "node_modules/node-pty/**/*.node",
+      "node_modules/node-pty/**/spawn-helper"
+    ],
+    "targets": [
+      "node22-macos-arm64",
+      "node22-macos-x64",
+      "node22-linux-x64"
+    ],
+    "outputPath": "dist/bin"
+  },
+  "devDependencies": {
+    "@jerico/shared": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@types/which": "^3.0.4",
+    "@types/ws": "^8.5.10",
+    "@yao-pkg/pkg": "^6.20.0",
+    "commander": "^12.0.0",
+    "esbuild": "^0.27.4",
+    "typescript": "^5.4.0",
+    "which": "^4.0.0",
+    "ws": "^8.17.0"
+  }
+}

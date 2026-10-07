@@ -1,0 +1,37 @@
+{
+  "//": "v1 ships arm64 (Apple Silicon). Universal/Intel deferred — lipo-merged pkg daemon fails codesign strict validation; needs a per-arch feed or a natively-universal daemon build (tracked separately).",
+  "name": "@jerico/desktop",
+  "version": "0.26.43",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "node scripts/build-intro.mjs --check && electron-vite build",
+    "build:intro": "node scripts/build-intro.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "svelte-check --tsconfig ./tsconfig.check.json --threshold error",
+    "package:mac": "node scripts/build-intro.mjs --check && electron-vite build && electron-builder --mac --arm64",
+    "test:tray": "node --test scripts/lib/tray-variants.test.mjs",
+    "test:intro": "node --test scripts/intro-gate.test.mts scripts/first-run-policy.test.mts",
+    "test:wizard": "node --test scripts/wizard-rail.test.mts",
+    "test:ports": "node --test scripts/health-port.test.mts",
+    "test:popover": "node --test scripts/popover-model.test.mts scripts/popover-endpoints.test.mts scripts/tray-reconciliation.test.mts scripts/endpoint-rejected.test.mts scripts/foreign-registration.test.mts scripts/update-state.test.mts scripts/usage-window-freshness.test.mts",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "@jerico/shared": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "svelte": "^4.2.0",
+    "svelte-check": "^3.6.0",
+    "svelte-preprocess": "^5.0.0",
+    "typescript": "^5.4.0"
+  }
+}

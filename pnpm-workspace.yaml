@@ -1,0 +1,14 @@
+packages:
+  - 'packages/daemon'
+  - 'packages/mcp-server'
+  - 'packages/codegraph'
+  - 'packages/inspect-runtime'
+  - 'packages/shared'
+  - 'apps/desktop'
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild
+  - node-pty
+  - svelte-preprocess

@@ -1,0 +1,13 @@
+Jerico — open client packages
+Copyright 2026 Appnova EU OÜ
+
+This product includes software developed by Appnova EU OÜ and contributors.
+
+packages/daemon is licensed under the MIT License (packages/daemon/LICENSE).
+All other packages are licensed under the Apache License, Version 2.0; see the
+LICENSE file in each package and LICENSE.md for the full map.
+
+This product embeds the following fonts, licensed under the SIL Open Font
+License, Version 1.1 (texts in apps/desktop/fonts-licenses/):
+  - Archivo — Copyright 2020 The Archivo Project Authors
+  - IBM Plex Mono — Copyright 2017 IBM Corp., Reserved Font Name "Plex"

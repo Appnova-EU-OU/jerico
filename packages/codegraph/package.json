@@ -1,0 +1,43 @@
+{
+  "name": "@bridge/codegraph",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Bridge codegraph MCP server — tree-sitter indexing + symbol search",
+  "main": "./dist/index.cjs",
+  "bin": {
+    "jerico-codegraph": "./dist/index.cjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "smoke:issue628": "node live-smoke-issue628.mjs",
+    "smoke:d1": "node live-smoke-d1.mjs"
+  },
+  "dependencies": {
+    "@jerico/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "better-sqlite3": "^12.10.0",
+    "web-tree-sitter": "0.25.5",
+    "tree-sitter-wasms": "0.1.13",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.27.4",
+    "typescript": "^5.4.0"
+  },
+  "pkg": {
+    "scripts": ["dist/index.cjs"],
+    "assets": [
+      "node_modules/web-tree-sitter/*.wasm",
+      "node_modules/tree-sitter-wasms/**/*.wasm",
+      "node_modules/better-sqlite3/**/*.node"
+    ],
+    "targets": ["node22-macos-arm64"],
+    "outputPath": "dist/bin"
+  }
+}

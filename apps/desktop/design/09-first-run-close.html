@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jerico — the first run closes: what came back</title>
+<link rel="stylesheet" href="_fonts.css">
+<style>
+/* ------------------------------------------------------------------------ */
+/*  09 — THE CLOSE. Seven become one; one opens into three.                 */
+/*                                                                          */
+/*  This exists because the sequence had no ending: 08 lifted its wash and   */
+/*  the runner then destroyed the iframe, so the last thing on screen was an */
+/*  empty rectangle. The fix is not a card laid over a scene that is still   */
+/*  busy being a product — measured, a mono register over the mono event log */
+/*  read as a rendering fault — it is a scene with its own compositing       */
+/*  plane. In product that plane is transparent over the live desktop.       */
+/*                                                                          */
+/*  NOTHING HERE IS A SURFACE. No window, no sheet, no product: for a        */
+/*  minute the screen has been a thing you operate and this is where it      */
+/*  stops being one. Everything is drawn on the canvas.                     */
+/*                                                                          */
+/*  QUOTED from 04: the mark's geometry and its birth by travelling light,   */
+/*  the lockup's typography and its 92px offset, the arrival bell's          */
+/*  inharmonic partial table. The dark ground is review-only. AUTHORED: the  */
+/*  seven rows                                                              */
+/*  and the last line — a film has to say something for itself, and those    */
+/*  are the only words here the product could not supply.                    */
+/* ------------------------------------------------------------------------ */
+
+:root {
+  --bg: #0b0b0b; --ink: #f2f0ec; --ink-2: #a5a19a; --ink-3: #8e8a83; --ink-ghost: #807d74;
+  --rule: #232322; --rule-2: #34342f;
+  --display: "Archivo", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(.2,.7,.2,1);
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display);
+  font-size: 15px; line-height: 1.58; -webkit-font-smoothing: antialiased; }
+.plate { max-width: 1180px; margin: 0 auto; padding: clamp(26px,4.5vw,54px) clamp(18px,4vw,40px) 90px; }
+.slug { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-ghost); padding-bottom: 13px; border-bottom: 1px solid var(--rule); }
+.slug .r { margin-left: auto; }
+h1 { margin: 26px 0 0; font-size: clamp(30px, 5.4vw, 50px); font-weight: 600; font-stretch: 118%;
+  letter-spacing: -.028em; line-height: 1.03; text-wrap: balance; }
+h1 em { font-style: normal; font-weight: 300; font-stretch: 125%; letter-spacing: -.012em; }
+.lede { margin: 16px 0 0; max-width: 62ch; color: var(--ink-2); font-size: 15px; }
+.lede b { color: var(--ink); font-weight: 500; }
+.lede code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+/* ══ THE STAGE ══════════════════════════════════════════════════════════ */
+.stage { position: relative; margin-top: 28px; aspect-ratio: 16/10;
+  border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+  background:
+    radial-gradient(58% 44% at 18% 22%, #8ea6d8 0%, transparent 62%),
+    radial-gradient(52% 46% at 82% 30%, #f0d8a8 0%, transparent 60%),
+    radial-gradient(64% 52% at 62% 88%, #e0a2a8 0%, transparent 62%),
+    linear-gradient(148deg, #6f86bd 0%, #b9c3dd 44%, #efd7b4 78%, #dda9a6 100%); }
+
+.desk-bar { position: absolute; inset: 0 0 auto 0; height: 26px; z-index: 2;
+  display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%);
+  font-family: var(--mono); font-size: 10.5px; color: rgba(20,20,20,.68); }
+.desk-bar .sp { flex: 1; }
+/* The mark is simply THERE. 07's last durable act is the icon arriving in the
+   menu bar, so by the time this plays it is furniture; drawing its arrival
+   again would undo 07's payoff. */
+.desk-bar .glyph { display: inline-flex; color: rgba(20,20,20,.78); }
+
+.brow { position: absolute; left: 3.4%; top: 6.4%; width: 93.2%; height: 88%;
+  z-index: 1; border-radius: 10px; overflow: hidden;
+  background: var(--o-base); border: 1px solid rgba(0,0,0,.5);
+  box-shadow: 0 34px 80px -26px rgba(12,16,32,.72), 0 0 0 .5px rgba(0,0,0,.4);
+  display: flex; flex-direction: column; }
+.brow .btop { height: 32px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 11px; background: #1b1b1e; border-bottom: 1px solid rgba(0,0,0,.45); }
+.brow .lights { display: flex; gap: 7px; }
+.brow .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.brow .tab { display: flex; align-items: center; gap: 7px; height: 22px; padding: 0 11px;
+  border-radius: 5px; background: var(--o-base); font-size: 11px; color: var(--o-t300); }
+.brow .tab .fav { width: 11px; height: 11px; display: inline-flex; color: var(--o-accent-text); }
+.brow .url { margin-left: auto; height: 21px; display: flex; align-items: center;
+  padding: 0 12px; border-radius: 11px; background: rgba(255,255,255,.05);
+  font-family: var(--mono); font-size: 10.5px; color: var(--o-t400); }
+
+/* ══ THE WEB APP, in its own tokens ═════════════════════════════════════ */
+.brow {
+  --o-base: #111113; --o-elev: #18181b; --o-sheet: #141416; --o-tab: #1e1e1e;
+  --o-t200: rgba(255,255,255,.80); --o-t300: rgba(255,255,255,.70);
+  --o-t400: rgba(255,255,255,.55); --o-t500: rgba(255,255,255,.35);
+  --o-faint: rgba(255,255,255,.20);
+  --o-b-sub: rgba(255,255,255,.06); --o-b-def: rgba(255,255,255,.08);
+  --o-b-str: rgba(255,255,255,.12);
+  --o-accent: #d97706; --o-accent-text: #fbbf24; --o-accent-border: rgba(245,158,11,.30);
+  --o-accent-subtle: rgba(245,158,11,.10);
+  --o-running: #34d399; --o-blocked: #fbbf24; --o-error: #ef4444;
+  --o-finished: #059669; --o-idle: rgba(255,255,255,.07);
+  --o-scope-p: #f59e0b;      /* scope-project — amber-500 */
+  --o-scope-w: #8b5cf6;      /* scope-workspace — violet-500 */
+  --o-grp: #6366f1;          /* a new group's colour: the schema table default */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ══ THE STAGE ══════════════════════════════════════════════════════════
+   Nothing is drawn in the DOM here — no window, no sheet, no product. This is
+   the only one of these sheets whose frame is not a surface, and that is what
+   makes it an ending: for sixty seconds the screen has been a thing you operate,
+   and then it stops being one.
+
+   The standalone sheet keeps 04's neutral ground for review. `?app=1` removes
+   it: the shipped close stays over the live desktop and gives only its text a
+   quiet local shadow. */
+.stage { position: relative; margin-top: 28px; aspect-ratio: 16/10;
+  border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+  background: linear-gradient(180deg, #070a12 0%, #0a0b10 46%, #120c08 100%); }
+
+
+/* ── present mode ──────────────────────────────────────────────────────────
+   `?present` or `#present`: the review document steps out of the way and the
+   stage becomes the whole screen. Not a different drawing — the same stage, with
+   the plate, the beat table, the notes and the scrubber removed and the frame
+   unbounded, so the piece can be watched as a piece instead of read as a spec.
+   The HUD stays: Skip must remain reachable, and it is still the first tab stop. */
+body.present { overflow: hidden; background: #000; }
+body.present .plate { max-width: none; margin: 0; padding: 0; }
+body.present .slug, body.present h1, body.present .lede,
+body.present .scrub, body.present .beats, body.present .annot { display: none; }
+/* Letterboxed, not stretched. The stage's canvas has a 1280x800 backing store
+   drawn at 100%/100%, so an unbounded stage on a screen that is not 16:10
+   squashes the film — measured on this machine, 1512x982 is 1.54 and the whole
+   frame came out short. It keeps its ratio and the screen keeps the difference. */
+body.present .stage {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  margin: 0; border: 0; border-radius: 0;
+  width: min(100vw, 160vh); height: min(100vh, 62.5vw);
+  aspect-ratio: 16 / 10;
+}
+/* The standalone sheet has a neutral review ground. In the shipped flow the
+   live desktop remains, and legibility belongs to local text shadow instead of
+   a full-screen black card. */
+body.app, body.app.present, body.app.present .stage { background: transparent; }
+body.app #scrim { opacity: 0 !important; }
+
+
+/* ── the announced track ────────────────────────────────────────────────── */
+/*  The statements ARE the content, and they are painted onto a canvas, which
+    means a screen reader gets a focused surface that says nothing at all — the
+    film's oldest open item, inherited by all three of these. So the same text
+    is also carried in a polite live region: not a description of the picture,
+    which would be narration, but the one line the picture is there to deliver.
+    Announced once each, in order, and the way out is stated up front. */
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── the film's own two layers, verbatim from 04 ────────────────────────── */
+#scrim { position: absolute; inset: 0; z-index: 4; opacity: 0;
+  background: linear-gradient(180deg, #070a12 0%, #0a0b10 46%, #120c08 100%); }
+#bleed { position: absolute; inset: 0; z-index: 5; opacity: 0; pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  background:
+    radial-gradient(120% 62% at 50% 104%, rgba(255,168,74,.62) 0%, rgba(196,92,26,.26) 34%, rgba(0,0,0,0) 68%),
+    radial-gradient(70% 40% at 50% 88%, rgba(255,214,150,.34) 0%, rgba(0,0,0,0) 70%); }
+canvas#cv { position: absolute; inset: 0; z-index: 6; width: 100%; height: 100%; display: block; }
+canvas#curs { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%;
+  display: block; pointer-events: none; }
+
+.hud { position: absolute; inset: auto 0 0 0; z-index: 8; display: flex; align-items: center;
+  padding: 0 16px 14px; pointer-events: none; }
+.hud button { pointer-events: auto; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase; color: rgba(242,240,236,.6);
+  background: rgba(20,20,20,.35); border: 0; border-radius: 2px; padding: 6px 10px; cursor: pointer; }
+.hud button:hover { color: #fff; background: rgba(20,20,20,.55); }
+.hud .sp { flex: 1; order: 2; }
+.hud #mute { order: 1; }
+.hud #skip { order: 3; }
+.gate { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center;
+  background: rgba(11,11,11,.86); }
+.gate[hidden] { display: none; }
+.gate .in { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gate p { margin: 0; max-width: 38ch; font-size: 12.5px; color: var(--ink-3); }
+.btn { display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono);
+  font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase;
+  padding: 12px 20px; border-radius: 2px; border: 1px solid var(--ink);
+  background: var(--ink); color: var(--bg); cursor: pointer; }
+.btn:hover { background: #fff; }
+.scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.scrub input[type=range] { flex: 1; accent-color: #f2f0ec; height: 3px; }
+.scrub .t { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); min-width: 84px; }
+.beats { margin-top: 38px; border-top: 1px solid var(--rule); }
+.beats > div { display: flex; gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--rule);
+  align-items: baseline; }
+.beats .tt { font-family: var(--mono); font-size: 10.5px; color: var(--ink-ghost); min-width: 78px; flex: none; }
+.beats .nm { font-size: 13.5px; font-weight: 500; color: var(--ink); min-width: 124px; flex: none; }
+.beats .ds { font-size: 13px; color: var(--ink-2); }
+.beats .ds b { color: var(--ink); font-weight: 500; }
+.beats .ds em { font-style: italic; color: var(--ink-3); }
+.beats .ds code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+@media (max-width: 640px) { .beats > div { flex-direction: column; gap: 4px; } }
+.annot { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--rule);
+  display: grid; gap: 26px 44px; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); }
+.annot section { display: flex; flex-direction: column; gap: 7px; }
+.annot h3 { margin: 0; font-family: var(--mono); font-size: 9.5px; font-weight: 400;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-ghost); }
+.annot p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.annot p b { color: var(--ink); font-weight: 500; }
+.annot code { font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  background: #121212; border: 1px solid var(--rule); border-radius: 2px; padding: 1px 4px; }
+.annot em { font-style: italic; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="plate">
+
+  <div class="slug">
+    <span>Jerico</span><span>First run · the close</span>
+    <span class="r">Proposal 09 · rev A — the account, and one line</span>
+  </div>
+
+  <h1>Seven become one.<br><em>One opens into three</em>.</h1>
+
+  <p class="lede">
+    The sequence had no ending. 07 handed over, 08 wrote a decision back and lifted its
+    wash, and then the runner destroyed the iframe — so the last thing an audience saw was
+    an <b>empty black rectangle</b>. A film that is removed does not read as a film that
+    finished, and the fix does not belong inside the scene that was still busy being a
+    product: <b>this is its own scene</b>, with its own compositing plane, and it is the only frame in
+    the whole sequence that is not a surface you operate.
+  </p>
+  <p class="lede">
+    It does two things. It <b>accounts</b> for what just happened — one line per thing, in
+    the order it happened, ordinals and hairlines in the wizard's own ledger idiom rather
+    than bullets or ticks — and then it <b>collects</b> them: the seven resting lights
+    converge on the mark's single input node. From that same point the stem and three branches
+    draw outward. The film opens by splitting one into three, and this close recalls that exact
+    direction. The mark is <em>earned</em> the second time rather than presented.
+  </p>
+
+  <div class="stage" id="stage">
+    <p class="sr">Jerico first-run close. Press Escape or Skip to leave it.</p>
+    <div class="sr" role="status" aria-live="polite" id="say"></div>
+
+    <div id="scrim"></div>
+    <div id="bleed"></div>
+    <canvas id="cv" width="1280" height="800"></canvas>
+
+    <div class="hud">
+      <button type="button" id="skip">Skip</button>
+      <button type="button" id="mute">♪ sound on</button>
+      <span class="sp"></span>
+    </div>
+
+    <div class="gate" id="gate">
+      <div class="in">
+        <button type="button" class="btn" id="play">Play</button>
+        <p>The score is synthesised in the page, so it cannot drift from the picture. Browsers need a click before any audio.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrub">
+    <input type="range" id="range" min="0" max="1000" value="0" aria-label="Scrub the timeline" />
+    <span class="t" id="tlabel">0.00 / 10.4s</span>
+    <button type="button" class="btn" id="replay" style="padding:8px 14px">Replay</button>
+  </div>
+
+  <div class="beats">
+    <div><span class="tt">0.0 – 4.2</span><span class="nm">The account</span><span class="ds">Seven lines, one per thing that happened, each one <b>drawn by a point of light</b> that runs its hairline out and comes to rest as its node. No typing: a register is read, not spoken. The rows are not written copy — each one is a beat that just played, phrased as what you now <em>have</em> rather than which control was pressed. The first row is 07's, because this scene ends the whole run and not only the half it follows.</span></div>
+    <div><span class="tt">4.8 – 5.7</span><span class="nm">It is collected</span><span class="ds">The seven resting nodes leave their own rows and converge on <b>one input point</b>. The moving nodes are the same lights that ended each ledger row, so the account visibly becomes the mark rather than disappearing before it. There are no additive particles or bloom. It waits first: the completed account holds for a breath over two seconds, because a register gathered the moment it is complete was never read.</span></div>
+    <div><span class="tt">5.7 – 7.0</span><span class="nm">And the mark is earned</span><span class="ds">The point they land on <b>is the mark's input node</b>. From it the stem draws and the three branches open outward, one point becoming three in 04's direction and geometry. The bell that rings here is 04's arrival bell at full weight, the only strike in the scene.</span></div>
+    <div><span class="tt">7.0 – 10.4</span><span class="nm">One line, then nothing moves</span><span class="ds"><b>Jerico</b> sets under the mark in the film's own lockup — <code>300 46px Archivo</code>, <code>scale(1.25)</code>, 92 px down — and one sentence lands under it: <em>Tomorrow it starts where you stopped.</em> It fades rather than types; a title card does not speak. Then nothing moves, nothing fades out, and the frame holds. 04's rule, kept: the accommodation removes the motion, not the ending.</span></div>
+  </div>
+
+  <div class="annot">
+    <section>
+      <h3>Why the ending is a separate sheet</h3>
+      <p>The first attempt put it inside 08, over the event log it had just written. Measured,
+      it failed for a reason worth recording: the register and the log are <b>the same kind of
+      thing at the same scale</b> — mono text in rows — so one landed on top of the other and
+      read as a rendering fault rather than as a card. Deepening the wash traded the fault for
+      a different one, a slide covering a product that was still trying to be legible
+      underneath it. An ending needs its own compositing plane; in product that plane keeps
+      the live desktop rather than replacing it with a black card.</p>
+      <p>It also buys the thing the sequence was missing: <b>the beat list gets an ending it can
+      name</b>. The runner plays beats, not files, so `09:account` and `09:lockup` are now
+      orderable pieces like every other — and the flow's last frame is a held card rather than
+      whatever the last scene happened to stop on.</p>
+    </section>
+    <section>
+      <h3>The account becomes the mark</h3>
+      <p>04 states its own device plainly: <em>the mark is drawn BY the light, not revealed
+      under it — it runs out along the stem, splits into three, and the three branches are the
+      paths it takes. One input becomes three, and the motion is the only thing that says
+      so.</em> The close uses the same direction because direction is part of the mark, not an
+      interchangeable transition.</p>
+      <p>Seven lights, one per thing the run produced, first travel <b>inward</b> and become the
+      single input. Only then does that one open into three. The claim is not decoration:
+      a fleet's work coming back as one thing the project keeps is what the last two beats of 08
+      actually did, and this is that sentence drawn.</p>
+    </section>
+    <section>
+      <h3>What is quoted</h3>
+      <p><b>Quoted:</b> the mark's geometry and its birth technique (04, verbatim — the
+      layout-space bezier, the running head, the node coming to rest), the lockup's typography
+      and its 92 px offset, the arrival bell's inharmonic partial table, and the ground
+      gradient. <b>Authored:</b> the seven rows and the last line — they are this sheet's
+      account of the sequence, not strings read out of the product. That is the honest
+      distinction: everything the product could tell us is quoted, and the only invented words
+      are the ones a film has to say for itself.</p>
+    </section>
+    <section>
+      <h3>Open</h3>
+      <p>The last line is a first draft. <em>Tomorrow it starts where you stopped</em> is true of
+      the memory tools and it is the claim the run earns, but it is one of four that were
+      written and the choice was made in a single pass. The other three are on the branch's
+      commit message rather than in the file, which is where a rejected line belongs.</p>
+    </section>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d')
+  var scrimEl = document.getElementById('scrim'), bleedEl = document.getElementById('bleed')
+  var gate = document.getElementById('gate'), playBtn = document.getElementById('play')
+  var skipBtn = document.getElementById('skip'), muteBtn = document.getElementById('mute')
+  var replayBtn = document.getElementById('replay'), range = document.getElementById('range')
+  var tlabel = document.getElementById('tlabel')
+  var W = 1280, H = 800
+
+  /* ── the sequence, as movable parts ───────────────────────────────────────
+     Same contract as 07 and 08: the beat is the unit of order, `state(t)` is a
+     pure function of t, and the sheet publishes its own beat list rather than
+     owning where it sits in the flow. Authored at 1.0 — this scene is short and
+     already paced, so there is no rate to correct. */
+  var SEQ = [
+    { key: 'account', len: 4.2 },   // seven lines, drawn by light
+    { key: 'lockup',  len: 5.8 }    // collected, the mark, the word, the line
+  ]
+  var AT = {}
+  var END = (function () {
+    var t = 0
+    for (var i = 0; i < SEQ.length; i++) { AT[SEQ[i].key] = t; t += SEQ[i].len }
+    return t
+  })()
+  var DUR = END + 0.4
+  var RATE = 1.0
+  function authored(tr) { return tr * RATE }
+  function real(ta) { return ta / RATE }
+  var DUR_REAL = real(DUR)
+
+  window.JERICO_SCENE = (function () {
+    var bs = [], prev = 0
+    SEQ.forEach(function (s) {
+      var end = real(AT[s.key] + s.len)
+      bs.push({ key: s.key, fromReal: prev, toReal: end })
+      prev = end
+    })
+    bs[bs.length - 1].toReal = DUR_REAL          // the held card rides the last beat
+    bs.forEach(function (b) { b.len = +(b.toReal - b.fromReal).toFixed(2) })
+    return { file: location.pathname.split('/').pop(), rate: RATE, durReal: DUR_REAL, beats: bs }
+  })()
+
+  var ONE = (function () {
+    var m = /[?&]beat=([a-z0-9_-]+)/i.exec(location.search)
+    if (!m) return null
+    for (var i = 0; i < window.JERICO_SCENE.beats.length; i++) {
+      if (window.JERICO_SCENE.beats[i].key === m[1]) return window.JERICO_SCENE.beats[i]
+    }
+    return null
+  })()
+  var SPAN = (function () {
+    var a = /[?&]from=([\d.]+)/.exec(location.search)
+    var b = /[?&]to=([\d.]+)/.exec(location.search)
+    if (!a && !b) return null
+    return { from: a ? parseFloat(a[1]) : 0, to: b ? parseFloat(b[1]) : DUR_REAL }
+  })()
+  var PLAY_FROM = SPAN ? Math.max(SPAN.from, 0) : (ONE ? Math.max(ONE.fromReal - 0.45, 0) : 0)
+  var PLAY_TO = Math.min(SPAN ? SPAN.to : (ONE ? ONE.toReal : DUR_REAL), DUR_REAL)
+
+  if (/[?&#]present/.test(location.search + location.hash)) document.body.classList.add('present')
+  var APP_MODE = /[?&]app=1/.test(location.search)
+  if (APP_MODE) document.body.classList.add('app')
+
+  function clamp(v,a,b){ return v<a?a:v>b?b:v }
+  function seg(t,a,b){ return clamp((t-a)/(b-a),0,1) }
+  function outCubic(p){ return 1-Math.pow(1-p,3) }
+  function inOutCubic(p){ return p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2 }
+  function lerp(a,b,p){ return a+(b-a)*p }
+
+  var MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace'
+
+  /* ── the account ──────────────────────────────────────────────────────────
+     Seven rows, one per thing the run produced. Row 01 is 07's: this scene ends
+     the whole first run, not the half it follows. Each is phrased as what the
+     user now HAS rather than which control was pressed — a register of results,
+     which is the only kind of recap that is not a slide of steps. */
+  var LEDGER = [
+    'A menu-bar app, permitted once',
+    'The project you meant, not the tab you left open',
+    'An orchestrator, started on a blank spec',
+    'A group, named and staffed with four tools',
+    'Yesterday read before anything was written',
+    'Rules that travel with the work, attached by the server',
+    'A decision written back, where the next session will find it'
+  ]
+  var SAY = 'Tomorrow it starts where you stopped.'
+
+  /* The block is CENTRED in the frame rather than set at the left margin the
+     statements use: the lockup that follows is centred, and a register that sits
+     hard left hands over to it by sliding the whole composition sideways. Measured
+     from the longest row — 300 in, and the hairline's 660 out — the two margins
+     come to 300 and 320. */
+  var ROW_X = 300, ROW_TOP = 196, ROW_STEP = 62
+  /* the first row starts almost immediately — in the flow this scene is cut to,
+     and a register that begins 0.55s in hands the seam half a second of black */
+  var R = { from: 0.10, step: 0.38, draw: 0.30 }
+  function rowAt(i) { return R.from + i * R.step }
+
+  /* ── the collection ──
+     It waits: the completed register holds for a breath over two seconds before
+     the first light leaves it. An account that is gathered the moment it is
+     complete was never read — it was only shown. */
+  var C = {
+    from: AT.lockup + 0.55,
+    rowStag: 0.035, rowRun: 0.68, clear: 0.30
+  }
+  C.arrive = C.from + (LEDGER.length - 1) * C.rowStag + C.rowRun
+  C.land = C.arrive
+  var M = { birth: C.land + 0.12, stem: 0.20, branch: 0.58 }
+  M.done = M.birth + M.stem + M.branch
+  var WORD = M.done + 0.20
+  var SAY_AT = WORD + 0.90
+
+  /* the mark, in 04's own layout space and at 04's own scale */
+  var S = 5.2, MX = W * 0.5, MY = H * 0.42
+  function L2W(lx, ly) { return { x: MX + lx * S, y: MY + ly * S } }
+  var IN = L2W(-9, 0), STEM = L2W(-5, 0)
+  var ENDS = [L2W(3, -7), L2W(3, 0), L2W(3, 7)]
+  function branchAt(i, u) {
+    var p0 = STEM, p3 = ENDS[i]
+    var p1 = L2W(-2, 0), p2 = L2W(-2, [-7, 0, 7][i])
+    var m = 1 - u
+    return {
+      x: m*m*m*p0.x + 3*m*m*u*p1.x + 3*m*u*u*p2.x + u*u*u*p3.x,
+      y: m*m*m*p0.y + 3*m*m*u*p1.y + 3*m*u*u*p2.y + u*u*u*p3.y
+    }
+  }
+  /* The seven ledger nodes are the material of the mark. A quadratic gives each
+     one a readable journey from its row to the single input node; no new particle
+     is created between the account and the lockup. */
+  function collectAt(i, u) {
+    var x0 = ROW_X - 22, y0 = ROW_TOP + i * ROW_STEP
+    var cx = lerp(x0, IN.x, 0.58), cy = lerp(y0, IN.y, 0.16)
+    var m = 1 - u
+    return {
+      x: m*m*x0 + 2*m*u*cx + u*u*IN.x,
+      y: m*m*y0 + 2*m*u*cy + u*u*IN.y
+    }
+  }
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  function reduceHolds() { return [rowAt(LEDGER.length - 1) + 0.6, M.done + 0.3, SAY_AT + 1.0] }
+  var REDUCE_HOLD_MS = 2000
+
+  var said = -1
+  function announce(i, text) {
+    if (i <= said) return
+    said = i
+    var el = document.getElementById('say')
+    if (el) el.textContent = text
+  }
+
+  /* A point is ink, not a glow effect: a hard core and one quiet outer ring.
+     No radial gradient and no additive blend, so several points never bloom into
+     the generic white-orange balls this ending used to produce. */
+  function pin(x, y, a, r) {
+    ctx.save()
+    ctx.strokeStyle = 'rgba(255,247,229,' + (0.18 * a).toFixed(3) + ')'
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.arc(x, y, r + 3, 0, 6.2832); ctx.stroke()
+    ctx.fillStyle = 'rgba(255,251,242,' + (0.94 * a).toFixed(3) + ')'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill()
+    ctx.restore()
+  }
+  function node(x, y, r, a) {
+    ctx.fillStyle = 'rgba(255,251,242,' + (0.95 * a).toFixed(3) + ')'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill()
+  }
+  function seed(x, y, r, a) {
+    ctx.fillStyle = 'rgba(255,251,242,' + (0.88 * a).toFixed(3) + ')'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill()
+  }
+
+  /* 07's subtitle treatment, scaled to the line it belongs to: a local radial
+     absence of light first, then the same restrained glyph shadow. It has no
+     rectangular edge and never becomes a plate over the desktop. */
+  function textMatte(cx, cy, matteW, matteR, a) {
+    if (!APP_MODE) return
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale((matteW * 0.5) / matteR, 1)
+    var pad = ctx.createRadialGradient(0, 0, 0, 0, 0, matteR)
+    pad.addColorStop(0, 'rgba(6,7,11,.26)')
+    pad.addColorStop(0.56, 'rgba(6,7,11,.14)')
+    pad.addColorStop(1, 'rgba(6,7,11,0)')
+    ctx.globalAlpha = a
+    ctx.fillStyle = pad
+    ctx.fillRect(-matteR, -matteR, matteR * 2, matteR * 2)
+    ctx.restore()
+  }
+  function textShadow() {
+    if (!APP_MODE) return
+    ctx.shadowColor = 'rgba(4,6,10,.54)'
+    ctx.shadowBlur = 11
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 2
+  }
+  function clearTextShadow() {
+    ctx.shadowColor = 'rgba(0,0,0,0)'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
+  }
+
+  function frame(t) {
+    lastDrawn = t
+    ctx.clearRect(0, 0, W, H)
+    /* The standalone review keeps the film ground. Product mode leaves the
+       desktop untouched; the bleed is the only full-frame light and it moves
+       just 0.05 through the last four seconds. */
+    scrimEl.style.opacity = APP_MODE ? 0 : 1
+    bleedEl.style.opacity = (0.08 + 0.05 * outCubic(seg(t, M.birth, WORD + 0.6))).toFixed(3)
+
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+
+    /* One falloff for the account as a block. Seven separate subtitle mattes
+       read as seven black pills; the daemon technique is a local absence of
+       light, not a background attached to every row. */
+    var ledgerMatte = seg(t, R.from, R.from + 0.24) *
+      (1 - seg(t, C.from - C.clear, C.from + 0.35))
+    textMatte(630, 382, 900, 250, ledgerMatte)
+
+    /* ── the seven rows ── */
+    for (var i = 0; i < LEDGER.length; i++) {
+      var at = rowAt(i)
+      if (t < at) continue
+      var y = ROW_TOP + i * ROW_STEP
+      /* it leaves when its light does, and the row goes with the light: the
+         register empties as it is gathered, so the lockup lands on a clear frame */
+      var dep = C.from + i * C.rowStag
+      /* it dims BEFORE its own light lifts off, not with it */
+      var out = 1 - seg(t, dep - C.clear, dep)
+      if (out <= 0.001) continue
+      var draw = outCubic(seg(t, at, at + R.draw))
+      var a = seg(t, at, at + 0.22) * out
+
+      ctx.globalAlpha = a * 0.9
+      ctx.fillStyle = 'rgba(255,255,255,.13)'
+      ctx.fillRect(ROW_X, y - 24, 660 * draw, 1)
+
+      var txtA = seg(t, at + 0.10, at + 0.34)
+      ctx.globalAlpha = a
+      textShadow()
+      ctx.font = '500 11px ' + MONO
+      ctx.fillStyle = 'rgba(255,253,248,.40)'
+      ctx.fillText('0' + (i + 1), ROW_X, y)
+      ctx.font = '400 16.5px ' + MONO
+      ctx.fillStyle = 'rgba(255,253,248,.93)'
+      ctx.globalAlpha = a * txtA
+      ctx.fillText(LEDGER[i], ROW_X + 42, y)
+      clearTextShadow()
+      if (txtA > 0.5) announce(i, LEDGER[i])
+
+      /* the node the light comes to rest as, and the light still arriving */
+      ctx.globalAlpha = a
+      node(ROW_X - 22, y, 3.2, 1)
+      if (draw < 1) pin(ROW_X + 660 * draw, y - 24, (1 - draw) * 0.72, 1.8)
+      ctx.globalAlpha = 1
+    }
+
+    /* The account itself moves into the mark. Each row's resting node leaves at
+       the same instant as its text and lands on the single real input node.
+       A very short 1px wake makes the direction legible without redrawing seven
+       decorative trails across the frame. */
+    for (var g = 0; g < LEDGER.length; g++) {
+      var g0 = C.from + g * C.rowStag
+      var gu = seg(t, g0, g0 + C.rowRun)
+      if (gu <= 0 || gu >= 1) continue
+      var gee = inOutCubic(gu)
+      var gp = collectAt(g, gee)
+      var tail = collectAt(g, Math.max(0, gee - 0.055))
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255,251,242,.16)'
+      ctx.lineWidth = 1
+      ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(gp.x, gp.y); ctx.stroke()
+      seed(gp.x, gp.y, 1.7, 1)
+      ctx.restore()
+    }
+
+    /* The seven lights have become one hard point. It is the mark's input and
+       remains in place while that same point opens outward into three. */
+    var landA = seg(t, C.land - 0.20, C.land) * (1 - seg(t, M.done, M.done + 0.20))
+    if (landA > 0.01) pin(IN.x, IN.y, landA, 3.1)
+
+    /* ── one becomes three ──
+       04's direction is preserved: input to stem, then three branches. The
+       moving heads are hard points with a quiet ring, never additive bloom. */
+    var birth = seg(t, M.birth, M.done)
+    if (birth > 0.001) {
+      ctx.save()
+      if (APP_MODE) {
+        ctx.shadowColor = 'rgba(0,0,0,.46)'
+        ctx.shadowBlur = 8
+        ctx.shadowOffsetY = 1
+      }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+      ctx.strokeStyle = 'rgba(255,251,242,.9)'
+      ctx.lineWidth = 1.9 * S / 5.2 * 2.6
+      var stemP = outCubic(seg(t, M.birth, M.birth + M.stem))
+      ctx.beginPath(); ctx.moveTo(IN.x, IN.y)
+      ctx.lineTo(lerp(IN.x, STEM.x, stemP), IN.y); ctx.stroke()
+      var branchP = outCubic(seg(t, M.birth + M.stem, M.done))
+      for (var bi = 0; bi < 3; bi++) {
+        var lead = clamp(branchP * 1.50 - bi * 0.25, 0, 1)
+        if (lead <= 0) continue
+        ctx.beginPath()
+        for (var bv = 0; bv <= lead + 0.001; bv += 0.02) {
+          var bp = branchAt(bi, Math.min(bv, lead))
+          if (bv === 0) ctx.moveTo(bp.x, bp.y); else ctx.lineTo(bp.x, bp.y)
+        }
+        ctx.stroke()
+        var head = branchAt(bi, lead)
+        if (lead < 1) pin(head.x, head.y, 0.88, 2.3)
+        else node(ENDS[bi].x, ENDS[bi].y, 2 * S / 5.2 * 2.6, 1)
+      }
+      node(IN.x, IN.y, 2 * S / 5.2 * 2.6, 1)
+      ctx.restore()
+    }
+
+    /* ── the lockup, and one line ── */
+    var word = seg(t, WORD, WORD + 0.75)
+    var sa = seg(t, SAY_AT, SAY_AT + 0.85)
+    if (word > 0.01 || sa > 0.01) {
+      ctx.font = '300 46px Archivo, system-ui, sans-serif'
+      var wordMatteW = ctx.measureText('Jerico').width * 1.25 + 218
+      ctx.font = '300 27px Archivo, system-ui, sans-serif'
+      var sayMatteW = ctx.measureText(SAY).width * 1.06 + 128
+      /* One continuous field for the complete lockup: the mark spans MY±37,
+         the word sits at +92 and the line at +158. */
+      textMatte(W / 2, MY + 70, Math.max(wordMatteW, sayMatteW), 124,
+        Math.max(word, sa * 0.88))
+    }
+    if (word > 0.01) {
+      ctx.globalAlpha = word
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#fffdf8'
+      ctx.font = '300 46px Archivo, system-ui, sans-serif'
+      textShadow()
+      ctx.save(); ctx.translate(W / 2, MY + 92); ctx.scale(1.25, 1)
+      ctx.fillText('Jerico', 0, 0); ctx.restore()
+      clearTextShadow()
+      ctx.globalAlpha = 1
+    }
+    /* It FADES. Every other line in these sheets types, because every other line
+       is said while something is happening; this one is said when nothing is, and
+       a title card that types is a title card performing. */
+    if (sa > 0.01) {
+      announce(LEDGER.length + 1, SAY)
+      ctx.globalAlpha = sa * 0.88
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#fffdf8'
+      ctx.font = '300 27px Archivo, system-ui, sans-serif'
+      textShadow()
+      ctx.save(); ctx.translate(W / 2, MY + 158); ctx.scale(1.06, 1)
+      ctx.fillText(SAY, 0, 0); ctx.restore()
+      clearTextShadow()
+      ctx.globalAlpha = 1
+    }
+  }
+  var lastDrawn = 0
+
+  /* ── the score: the register ticking, one swell as it is gathered, the arrival
+        bell at full weight, and then silence. 04's bell, partial table and all. ── */
+  var actx = null, master = null, muted = false, live = []
+  function stopAudio(){ live.forEach(function(n){ try{n.stop()}catch(e){} }); live = [] }
+  function tone(t0,f,dur,peak,type){
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var o=actx.createOscillator(), g=actx.createGain()
+    o.type=type||'sine'; o.frequency.value=f
+    g.gain.setValueAtTime(0.0001,t0)
+    g.gain.exponentialRampToValueAtTime(peak,t0+0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur)
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0+dur+0.05); live.push(o)
+  }
+  function noise(t0,dur,peak,f0,f1,q,peakAt){
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var len=Math.ceil(actx.sampleRate*dur)
+    var buf=actx.createBuffer(1,len,actx.sampleRate), d=buf.getChannelData(0)
+    for(var i=0;i<len;i++) d[i]=Math.random()*2-1
+    var src=actx.createBufferSource(); src.buffer=buf
+    var bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=q||0.7
+    bp.frequency.setValueAtTime(f0,t0); bp.frequency.exponentialRampToValueAtTime(f1,t0+dur)
+    var g=actx.createGain()
+    g.gain.setValueAtTime(0.0001,t0)
+    g.gain.linearRampToValueAtTime(peak,t0+dur*(peakAt||0.78))
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur)
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t0); src.stop(t0+dur); live.push(src)
+  }
+  /* A struck bell, not a chord: inharmonic partials, the upper ones a hair late
+     and dying faster, the whole thing bent slightly down from its onset. Taken
+     from 04 unchanged — it is the same bell, and this is the strike it was for. */
+  function bell(t0, f, amp, decay) {
+    /* A cue whose moment has already passed is DROPPED rather than fired late.
+       `t0` is shifted below so the score lines up with a partial span, which puts
+       every cue before that span in the past; without this guard they all fired at
+       once on the first frame. */
+    if (t0 < actx.currentTime - 0.005) return
+    window.__cues.push(+t0.toFixed(3))
+    var dk = decay === undefined ? 1 : decay
+    var P = [[0.500,1.00,3.6],[1.000,0.92,2.7],[1.183,0.58,1.75],[1.506,0.44,1.30],
+             [2.000,0.35,0.90],[2.550,0.17,0.52],[3.010,0.11,0.36],[4.170,0.07,0.23]]
+    P.forEach(function (p, i) {
+      var o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'sine'
+      var det = 1 + (i % 2 ? 1 : -1) * 0.0016 * i
+      var hz = f * p[0] * det
+      o.frequency.setValueAtTime(hz * 1.007, t0)
+      o.frequency.exponentialRampToValueAtTime(hz, t0 + 0.10)
+      var st = t0 + i * 0.0024, pk = amp * p[1]
+      g.gain.setValueAtTime(0.0001, st)
+      g.gain.exponentialRampToValueAtTime(pk, st + 0.004)
+      g.gain.setTargetAtTime(0.00001, st + 0.006, (p[2] * dk) / 4.4)
+      o.connect(g); g.connect(master); o.start(st); o.stop(st + p[2] * dk + 0.25)
+      live.push(o)
+    })
+    noise(t0 - 0.004, 0.04 + 0.02 * dk, amp * 0.55, 7400, 2200, 0.9, 0.10)
+  }
+  /* ── the flow is continuous even though the documents are not ──────────────
+     Three scenes are three DOCUMENTS with three AudioContexts, and the runner used
+     to end one and begin the next: the room tone died with the outgoing page and
+     the incoming page's bed climbed from nothing, so every seam had a hole in it
+     — reported as the background sound breaking at the transitions.
+
+     The runner keeps the outgoing scene alive for a moment after the next one has
+     mounted (it is covered by then, so this is audible only), and calls this. The
+     old room fades UNDER the new one instead of stopping before it. */
+  window.__fadeOut = function (sec) {
+    if (!actx || !master) return
+    var now = actx.currentTime, d = sec || 0.6
+    try {
+      master.gain.cancelScheduledValues(now)
+      master.gain.setValueAtTime(master.gain.value, now)
+      master.gain.linearRampToValueAtTime(0.0001, now + d)
+    } catch (e) { /* a context already closed has nothing to fade */ }
+  }
+  /* Readable because it has to be checkable: the score is the one part of these
+     sheets nobody can look at, so the crossfade's actual level is exposed rather
+     than asserted. */
+  window.__level = function () { return master ? master.gain.value : null }
+  /* Runner flags. `handover` means a scene follows this one, so anything that
+     would fade out at the end holds instead and lets the crossfade do it;
+     `joined` means one preceded it, so nothing needs to be established from
+     silence — the room is already playing. Absent for a sheet opened on its own,
+     which is why a standalone read is unchanged. */
+  var HANDOVER = /[?&]handover=1/.test(location.search)
+  /* every scheduled cue, for review and for the tests — the score is the one part
+     of these sheets you cannot see */
+  window.__cues = []
+  /* Clamped to now. `t0` is span-shifted, so a scene started mid-file schedules the
+     beginning of its own score in the past — and a negative time does not merely
+     get ignored, it THROWS: measured, `setValueAtTime ... -16.927` took the whole
+     bed with it and the scene played silent. For an envelope, "already arrived" is
+     the correct reading of a moment that has passed. */
+  function at(x) { return Math.max(x, actx.currentTime + 0.001) }
+  function schedule() {
+    /* Shifted by the span's own start, because the picture starts at PLAY_FROM and
+       the score used to start at zero regardless — so any beat played on its own,
+       or any run the flow starts mid-file, heard the wrong second of the score. */
+    var t0 = actx.currentTime + 0.05 - real(PLAY_FROM)
+    /* ── it plays over silence ─────────────────────────────────────────────────
+       This scene had a bed of its own too, and it is gone for the same reason 08's
+       is: the fond belongs to the film and the daemon screens it fades out over,
+       and once it has faded it does not start again. What is left is what the scene
+       is actually made of — a tick per row, one swell as the lights are gathered,
+       and 04's arrival bell at full weight. A bell rings differently over nothing.
+
+       The lowpass went with it. It only ever shaped the bed; every cue here goes
+       straight to the master. */
+    /* the register writing itself — one tick per row, well under the bed */
+    for (var i = 0; i < LEDGER.length; i++) {
+      tone(t0 + real(rowAt(i)), 1020, 0.026, 0.0075, 'square')
+    }
+    /* one swell, rising with the gather and ending as it lands */
+    noise(t0 + real(C.from), real(C.land - C.from) + 0.10, 0.062, 220, 3800, 0.5, 0.86)
+    /* the arrival, at full weight. The only strike in the scene. */
+    bell(t0 + real(C.land), 587.33, 0.072, 1.00)
+    /* and one low note as the word sets */
+    tone(t0 + real(WORD), 98, 2.6, 0.040, 'triangle')
+  }
+
+  /* ── transport ── */
+  var raf=null, startedAt=0, playing=false
+  range.max = String(Math.round(DUR_REAL * 100))
+  function setLabel(tr){ tlabel.textContent = tr.toFixed(2)+' / '+DUR_REAL.toFixed(1)+'s' }
+  /* ── reaching the end of a span does not silence it ────────────────────────
+     `stop()` killed every oscillator the moment the picture reached PLAY_TO, which
+     is why extending the bed's envelope changed nothing: the envelope was still
+     scheduled and the nodes were already stopped. With a scene to follow, the audio
+     is LEFT RUNNING and the runner's crossfade takes it down over 0.8s before the
+     document — and with it the AudioContext — is removed. Every other caller
+     (Skip, the scrubber, Replay) still silences immediately, which is what those
+     mean. */
+  function stop(keepAudio){ playing=false; if(raf) cancelAnimationFrame(raf); raf=null
+    if (!keepAudio) stopAudio()
+    reduceTimers.forEach(clearTimeout); reduceTimers = [] }
+  function loop(){
+    var tr=PLAY_FROM+(performance.now()-startedAt)/1000
+    if(tr>=PLAY_TO){ tr=PLAY_TO; stop(HANDOVER) }
+    frame(authored(tr)); setLabel(tr); range.value=Math.round(tr*100)
+    if(playing) raf=requestAnimationFrame(loop)
+  }
+  function start(){
+    stop(); gate.hidden=true
+    if(!actx){
+      var AC=window.AudioContext||window.webkitAudioContext
+      actx=new AC()
+      var lim=actx.createDynamicsCompressor()
+      lim.threshold.value=-6; lim.knee.value=0; lim.ratio.value=20
+      lim.attack.value=0.002; lim.release.value=0.22
+      lim.connect(actx.destination)
+      master=actx.createGain(); master.gain.value=muted?0:0.72; master.connect(lim)
+    }
+    if(actx.state==='suspended') actx.resume()
+    /* The reduced track jumps between settled frames; the normal ledger cues
+       cannot remain attached to those pictures on that compressed clock. */
+    if (reduce) { playReduced(); return }
+    schedule()
+    startedAt=performance.now(); playing=true; loop()
+  }
+  /* Reduced motion: the settled moments, then the tail. Same accommodation the
+     other two make — remove the motion, not the ending. */
+  var reduceTimers = []
+  function playReduced() {
+    reduceTimers.forEach(clearTimeout); reduceTimers = []
+    var HOLDS = reduceHolds()
+    HOLDS.forEach(function (ht, i) {
+      reduceTimers.push(setTimeout(function () {
+        frame(ht); setLabel(real(ht)); range.value = Math.round(real(ht) * 100)
+      }, i * REDUCE_HOLD_MS))
+    })
+    reduceTimers.push(setTimeout(function () {
+      /* PLAY_TO includes the held-card tail after END. The product runner watches
+         the scene's published span, so stopping at END leaves reduced motion
+         alive until its outer timeout even though the picture is complete. */
+      frame(authored(PLAY_TO)); setLabel(PLAY_TO); range.value = Math.round(PLAY_TO * 100)
+    }, HOLDS.length * REDUCE_HOLD_MS))
+  }
+
+  playBtn.addEventListener('click', start)
+  replayBtn.addEventListener('click', start)
+  skipBtn.addEventListener('click', function(){ stop(); frame(authored(PLAY_TO)); setLabel(PLAY_TO); range.value=Math.round(PLAY_TO*100) })
+  muteBtn.addEventListener('click', function(){
+    muted=!muted
+    if(master) master.gain.value = muted?0:0.72
+    muteBtn.textContent = muted?'♪ sound off':'♪ sound on'
+  })
+  range.addEventListener('input', function(){ stop(); var tr=range.value/100; frame(authored(tr)); setLabel(tr) })
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'&&playing) skipBtn.click() })
+  window.addEventListener('resize', function(){ frame(lastDrawn) })
+
+  var mh = /(?:^|#|&)t=([\d.]+)/.exec(location.hash)
+  if (mh) { gate.hidden=true; frame(authored(parseFloat(mh[1]))); setLabel(parseFloat(mh[1])) }
+  else { frame(authored(PLAY_FROM)); setLabel(PLAY_FROM); range.value = Math.round(PLAY_FROM * 100) }
+})()
+</script>
+</body>
+</html>

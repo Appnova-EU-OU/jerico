@@ -1,0 +1,19 @@
+# Build artifacts (electron-vite output, electron-builder output)
+out/
+dist/
+
+# Daemon binary and PTY helper deposited by CI before packaging. Both are staged
+# into resources/ by the workflow (and by anyone packaging locally); neither is
+# source. spawn-helper was missing from this list, so a local package:mac left it
+# as an untracked 50 KB binary that could be committed by accident.
+resources/bridge-agent
+resources/spawn-helper
+
+# Un-ignore the build/ config directory (root .gitignore has build/ globally,
+# but apps/desktop/build/ holds source-controlled assets: entitlements plist).
+!build/
+!build/**
+
+# electron-vite writes a timestamped copy of the config next to it on each
+# dev run and does not always clean it up.
+electron.vite.config.*.mjs

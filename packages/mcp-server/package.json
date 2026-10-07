@@ -1,0 +1,26 @@
+{
+  "name": "@bridge/mcp-server",
+  "version": "0.6.0",
+  "license": "Apache-2.0",
+  "description": "Bridge MCP server — exposes Bridge project data to Claude Code agents",
+  "main": "./dist/index.cjs",
+  "bin": {
+    "bridge-mcp": "./dist/index.cjs"
+  },
+  "scripts": {
+    "build":     "tsc --noEmit && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "dev":       "tsc --watch",
+    "test":      "tsc && node --test dist/__tests__/*.test.js"
+  },
+  "dependencies": {
+    "@jerico/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild":     "^0.27.4",
+    "typescript":  "^5.4.0"
+  }
+}

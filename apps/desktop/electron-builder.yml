@@ -1,0 +1,106 @@
+appId: io.appnova.jerico
+productName: jerico
+
+directories:
+  output: dist
+
+# Files included in the asar bundle (electron-vite output + package.json)
+files:
+  - out/**/*
+  - package.json
+
+# Daemon binary placed at apps/desktop/resources/bridge-agent by CI.
+# electron-builder copies extraResources to <app>/Contents/Resources/ (outside asar),
+# so the binary is on the real FS and can be spawned directly.
+extraResources:
+  - from: resources/bridge-agent
+    to: bridge-agent
+  - from: resources/spawn-helper
+    to: spawn-helper
+  # The renderer embeds Archivo and IBM Plex Mono; the OFL requires their licence
+  # texts to travel with the fonts, so they ship in Contents/Resources/fonts-licenses.
+  - from: fonts-licenses
+    to: fonts-licenses
+
+asar: true
+# asarUnpack not needed here — extraResources are outside asar by design.
+# If any native module ends up inside out/ in the future, add it to asarUnpack.
+
+mac:
+  category: public.app-category.developer-tools
+  extendInfo:
+    # This is a menu-bar app: its whole UI is a tray icon and a popover. Without
+    # LSUIElement macOS launches it as an ordinary app, so the shipped build owned
+    # a Dock tile and an application menu from launch until whenReady() called
+    # app.dock.hide() — a tile that appears and vanishes on every start.
+    # dock.show() still works from here (the wizard and Update window call it, and
+    # an accessory app can raise itself with app.focus({ steal: true })), so the
+    # tile is now something those two windows borrow rather than the default.
+    LSUIElement: true
+  # x64ArchFiles: "**/bridge-agent"
+  # ^ REMOVED for per-arch builds. This setting is only consumed by @electron/universal's
+  #   makeUniversalApp (macPackager.js:104-113) which is unreachable when building
+  #   single-arch DMGs. When/if universal builds are re-attempted, restore this.
+  # jerico:// protocol handler — registered in Info.plist by electron-builder.
+  # Enables "open jerico://update" from any browser/terminal/web button.
+  protocols:
+    - name: Jerico
+      schemes:
+        - jerico
+  # No `identity` here: the signing identity is not kept in source. scripts/after-pack.js
+  # reads JERICO_MAC_SIGN_IDENTITY (the Developer ID Application certificate's common name,
+  # without the "Developer ID Application:" prefix) and exports it as CSC_NAME, which
+  # electron-builder uses when mac.identity is absent; after-sign.js builds the prefixed form
+  # codesign needs from the same variable. A signing build without it fails (sign-identity.js).
+  hardenedRuntime: true
+  # gatekeeperAssess: false keeps electron-builder from running a local Gatekeeper
+  # check on the unsigned CI runner (where Gatekeeper would always fail).
+  # The real assessment happens during notarization by Apple.
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # notarize: false — native notarize is DISABLED because electron-builder v24 runs
+  # it BEFORE afterSign. afterSign re-seals the .app (codesign --force → new cdhash),
+  # which strips the staple ticket. The .zip and .dmg would then be built from an
+  # un-stapled .app, failing offline Gatekeeper assessment.
+  # Notarization + stapling is owned by after-sign.js (runs after the final re-seal,
+  # before electron-builder packages the .zip/.dmg), so both artifacts ship stapled.
+  # v1 ships arm64 (Apple Silicon). Universal/Intel deferred — lipo-merged pkg daemon
+  # fails codesign strict validation; needs a per-arch feed or natively-universal daemon.
+  notarize: false
+  target:
+    # dmg — first-time manual install (download page / direct link)
+    - target: dmg
+    # zip — electron-updater automatic updates (Squirrel.Mac unpacks this)
+    # latest-mac.yml will reference the zip; the dmg is not used for OTA updates.
+    - target: zip
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+afterPack: scripts/after-pack.js
+# afterSign re-signs the bundled bridge-agent binary with the correct hardened-runtime
+# entitlements (disable-library-validation) and re-seals the .app bundle.
+afterSign: scripts/after-sign.js
+# afterAllArtifactBuild submits + staples the .dmg container (best-effort).
+# The .app inside is already notarized+stapled by afterSign before packaging.
+afterAllArtifactBuild: scripts/after-all-artifact-build.js
+
+# electron-builder creates/updates the GitHub Release for the current tag and uploads:
+#   - the DMG
+#   - latest-mac.yml  (consumed by the /updates feed proxy)
+#   - the .blockmap   (used by electron-updater for differential downloads)
+# releaseType:draft means the release stays hidden until the maintainer publishes it.
+# The /updates/latest-mac.yml feed only serves PUBLISHED releases, so users do not
+# receive the update until you click "Publish release" in the GitHub UI.
+publish:
+  provider: github
+  owner: alperduzgun
+  repo: jerico
+  releaseType: draft
